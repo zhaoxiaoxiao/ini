@@ -292,7 +292,8 @@ KeyValueNode *findIniKeyValue(IniFileNode *iniFileNode,char *key)
 {
 	ListkeyValueNode *pListkeyValueNode = NULL;
 	KeyValueNode *pKeyValueNode = NULL;
-	int len = strlen(key);
+	char *p_char = NULL;
+	int com_len = 0,len = strlen(key);
 	
 	if(iniFileNode == NULL || key == NULL)
 		return NULL;
@@ -310,7 +311,24 @@ KeyValueNode *findIniKeyValue(IniFileNode *iniFileNode,char *key)
 	{
 		if(memcmp((void *)(pKeyValueNode->key),(void *)key,len) == 0)
 		{
-			return pKeyValueNode;	
+			com_len = strlen(pKeyValueNode->key);
+			if(com_len == len)
+				return pKeyValueNode;
+			if(com_len > len)
+			{
+				p_char = pKeyValueNode->key + len;
+				while(com_len > len)
+				{
+					if(*p_char != CONTENT_SPACE && *p_char != CONTENT_TAB)
+					{
+						break;
+					}
+					com_len--;
+					p_char++;
+				}
+				if(com_len == len)
+					return pKeyValueNode;
+			}	
 		}	
 		pKeyValueNode = pKeyValueNode->next;
 	}
@@ -321,7 +339,8 @@ KeyValueNode *findIniKeyValue(IniFileNode *iniFileNode,char *key)
 IniFileNode *findIniFileNode(INI_FILE *p_inifile,char *section)
 {
 	IniFileNode *p = NULL;
-	int len = strlen(section);
+	char *p_char = NULL;
+	int com_len = 0 ,len = strlen(section);
 	if(p_inifile == NULL || section == NULL)
 		return NULL;
 	if(!listIniFileNode_is_empty(p_inifile))
@@ -330,7 +349,26 @@ IniFileNode *findIniFileNode(INI_FILE *p_inifile,char *section)
 	while(p != NULL)
 	{
 		if(memcmp((void*)(p->section),(void *)section,len) == 0)
-			return p;
+		{
+			com_len = strlen(p->section);
+			if(com_len == len)
+				return p;
+			if(com_len > len)
+			{
+				p_char = p->section + len;
+				while(com_len > len)
+				{
+					if(*p_char != CONTENT_SPACE && *p_char != CONTENT_TAB)
+					{
+						break;
+					}
+					com_len--;
+					p_char++;
+				}
+				if(com_len == len)
+					return p;
+			}	
+		}	
 		p = p->next;
 	}
 
