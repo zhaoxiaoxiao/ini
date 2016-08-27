@@ -28,6 +28,15 @@
 
 #include "inifile.h"
 
+#define IS_SHOWDEBUG_MESSAGE		0
+
+#if IS_SHOWDEBUG_MESSAGE
+#define PDEBUG(fmt, args...)	fprintf(stderr, "%s :: %s() %d: " fmt,__FILE__, \
+									__FUNCTION__, __LINE__, ## args)
+#else
+#define PDEBUG(fmt, args...)
+#endif
+
 //ini文件节点链表初始化
 void listIniFileNode_init(INI_FILE *list)
 {
@@ -186,10 +195,12 @@ void listkeyValueNode_deleteall(ListkeyValueNode **list)
 
     while(p_list->head && (p_list->head != p_list->tail))
     {
+    	PDEBUG("free key value\n");
         node = p_list->tail;
         p_list->tail = node->pre;
         free(node);
     }
+	PDEBUG("free key value\n");
     node = p_list->head;
     free(node);
 	free(p_list);
@@ -531,7 +542,7 @@ int initLineKeyValue(INI_FILE *p_inifile,char *line,int index)
 
 //读取文件类容，一行一行的读取，一直读到文件结束，换行符ascii码是10，空格键是32，制表符是9
 //如果有一行长度大于指定长度，返回长度错误，会导致整个程序出错的，
-int readIniFile(INI_FILE *p_inifile,char *filename){
+int readIniFile(INI_FILE *p_inifile,const char *filename){
     char line[(MAX_FILLINE_LEN+4)] = {0};
     int result = 0;
     FILE *fp = fopen(filename,"a+");
@@ -570,12 +581,13 @@ void destoryListIniFileNode(INI_FILE *p_inifile)
 
     while(p_inifile->tail != p_inifile->head)
     {
+    	PDEBUG("free node\n");
 		iniFileNode = p_inifile->tail;
 		p_inifile->tail = iniFileNode->pre;
 		listkeyValueNode_deleteall(&(iniFileNode->listkeyValueNode));
 		free(iniFileNode);
     }
-
+	PDEBUG("free node\n");
 	iniFileNode = p_inifile->head;
 	listkeyValueNode_deleteall(&(iniFileNode->listkeyValueNode));
 	free(iniFileNode);
@@ -835,11 +847,11 @@ bool ini_parameter_check(INI_PARAMETER *parameter,METHOD_TYPE type)
  * *  @fileName   	文件路径
  * *  @return      	ini文件在内存中操作的链表头指针，空说明初始化失败，文件不存在或者文件打开失败，或者文件中某一行内容超过指定长度
  * */
-INI_FILE *initIniFile(char *fileName,int len)
+INI_FILE *initIniFile(const char *fileName,int len)
 {
 	
 	int result = 0;
-	char *p_char = NULL;
+	const char *p_char = NULL;
 	INI_FILE *p_inifile = NULL;
 	
 	if(fileName == NULL || len > MAX_FILENAME_LEN || len <= 0)
@@ -1085,7 +1097,9 @@ int exitOperationIniFile(INI_FILE **p_inifile)
 	if(*p_inifile == NULL)
 		return -1;
 	
+	PDEBUG("free enter\n");
 	destoryListIniFileNode(*p_inifile);
+	
 	*p_inifile = NULL;
 	return 0;
 }

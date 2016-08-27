@@ -14,7 +14,6 @@
 *	传递参数字符数组必须以'\0'结尾
 */
 
-
 #define MAX_STRING_LEN 		64//定义字符串最大长度
 #define MAX_FILENAME_LEN	64//定义文件名最大长度
 #define MAX_FILLINE_LEN		128//定义文件名每一行最大长度
@@ -26,9 +25,6 @@
 #define CONTENT_SECTION			91//[
 #define CONTENT_COMMA			59//;
 #define CONTENT_EQUALITY		61//=
-
-
-
 
 typedef enum LineType{
 	EMPTYLIST = -5,//
@@ -111,7 +107,7 @@ typedef struct ini_parameter{
  * *  @len   		文件路径长度，必须小于MAX_FILENAME_LEN,end with '\0'
  * *  @return      	ini文件在内存中操作的链表头指针，空说明初始化失败
  * */
-INI_FILE *initIniFile(char *fileName,int len);
+INI_FILE *initIniFile(const char *fileName,int len);
 
 /* *
  * *  @brief       	                通过建获取ini文件值
@@ -181,3 +177,6 @@ int addSetction(INI_FILE *p_inifile,INI_PARAMETER *parameter);
  * *  @return      	                0操作成功，-1没有参数错误?
  * */
 int exitOperationIniFile(INI_FILE **p_inifile);
+
+
+
