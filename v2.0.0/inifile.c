@@ -469,7 +469,7 @@ INI_FILE_LINE_TYPE judge_ini_file_linetype(char *line)
 
 INI_KEYVALUE *find_keyvalue_unsect(INI_KEYVALUE *head,const char *key,int len)
 {
-	int ret;
+	int ret = 0,c_len = 0;
 	INI_KEYVALUE *p_key = head;
 
 	if(head == NULL || key == NULL)
@@ -477,11 +477,16 @@ INI_KEYVALUE *find_keyvalue_unsect(INI_KEYVALUE *head,const char *key,int len)
 
 	if(len <= 0)
 		len = str_int_len(key);
+	
 	while(p_key)
 	{
-		ret = memcmp((const void *)(p_key->key),(const void *)(p_key->value),len);
-		if(ret == 0)
-			break;
+		c_len = str_int_len(p_key->key);
+		if(c_len == len)
+		{
+			ret = memcmp((const void *)(p_key->key),(const void *)(p_key->value),len);
+			if(ret == 0)
+				break;
+		}
 		p_key = p_key->last;
 	}
 
@@ -554,7 +559,7 @@ error_out:
 
 INI_SETION *find_inifile_section(INI_SETION * head,const char *name,int len)
 {
-	int ret = 0;
+	int ret = 0,c_len = 0;
 	INI_SETION *p_section = head;
 	if(head == NULL || name == NULL)
 		return NULL;
@@ -563,9 +568,13 @@ INI_SETION *find_inifile_section(INI_SETION * head,const char *name,int len)
 		len = str_int_len(name);
 	while(p_section)
 	{
-		ret = memcmp((const void *)(p_section->sec),(const void *)name,len);
-		if(ret == 0)
-			break;
+		c_len = str_int_len(p_section->sec);
+		if(len == c_len)
+		{
+			ret = memcmp((const void *)(p_section->sec),(const void *)name,len);
+			if(ret == 0)
+				break;
+		}
 		p_section = p_section->last;
 	}
 	return p_section;
@@ -690,6 +699,13 @@ int read_analys_ini_file(int ini_fd,const char *file_name)
 	return ret;	
 }
 
+void delete_tmp_name_file(const char *filename)
+{
+	char cmd_str[INIFILE_SYSTEM_CMD_LEN] = {0};
+	sprintf(cmd_str,"rm -rf %s%s",filename,tem_suff_name);
+	system (cmd_str);
+}
+
 void re_name_ini_file(const char *filename)
 {
 	char cmd_str[INIFILE_SYSTEM_CMD_LEN] = {0};
@@ -736,6 +752,368 @@ int re_write_ini_file(const char *filename)
 	fclose(wp);
 	return 0;
 }
+
+int rewrite_after_update(const char *filename,INI_PARAMETER *parameter)
+{
+	int ret = 0,len = 0,flag = 0,mod_flag = 0;
+	FILE *rp = NULL,*wp = NULL;
+	INI_FILE_LINE_TYPE type;
+	char tmp_name[INIFILE_FILEALL_NAME_LEN] = {0},*p_char = NULL,*q_char = NULL,*p_value = NULL,*p_comma = NULL;
+	char line[INIFILE_MAX_CONTENT_LINELEN] = {0},mod_line[INIFILE_MAX_CONTENT_LINELEN] = {0};
+
+	if(parameter->section == NULL || parameter->key == NULL || parameter->value == NULL)
+		return INIFILE_ERROR_PARAMETER;
+
+	if(parameter->section_len <= 0)
+		parameter->section_len = str_int_len(parameter->section);
+	if(parameter->key_len <= 0)
+		parameter->key_len = str_int_len(parameter->key);
+	if(parameter->value_len <= 0)
+		parameter->value_len = str_int_len(parameter->value);
+	sprintf(tmp_name,"%s%s",filename,tem_suff_name);
+	rp = fopen(filename,"r");
+	if(rp == NULL)
+	{
+		ret = INIFILE_NO_EXIST;
+		goto error_out;
+	}
+	wp = fopen(tmp_name,"w");
+	if(wp == NULL)
+	{
+		ret = INIFILE_NO_EXIST;
+		goto error_out;
+	}
+
+	while(fgets(line,INIFILE_MAX_CONTENT_LINELEN,rp) != NULL)
+	{
+		if(mod_flag== 0)
+		{
+			type = judge_ini_file_linetype(line);
+			switch(type)
+			{
+				case LINE_SECTION:
+					p_char = str_frist_constchar(line,CONTENT_LEFT_BRACKET);
+					if(p_char == NULL)
+					{
+						ret = INIFILE_REWRITE_ERROR;
+						goto error_out;
+					}else
+						p_char++;
+					q_char = p_char + parameter->section_len;
+					if(*q_char == CONTENT_RIGHT_BRACKET)
+					{
+						ret = memcmp((const void *)(parameter->section),(const void *)p_char,parameter->section_len);
+						if(ret == 0)
+							flag = 1;
+					}
+					break;
+				case LINE_KEYVALUE:
+					if(flag == 1)
+					{
+						p_value = str_frist_constchar(line,CONTENT_EQUALITY_SIGN);
+						if(p_value == NULL)
+						{
+							ret = INIFILE_REWRITE_ERROR;
+							goto error_out;
+						}else{
+							p_char = line;
+							while(*p_char == CONTENT_SPACE_SIGN || *p_char == CONTENT_TAB_SIGN)
+							{
+								p_char++;
+							}
+						}
+
+						q_char = p_char + parameter->key_len;
+						if(*q_char == CONTENT_SPACE_SIGN || *q_char == CONTENT_TAB_SIGN || *q_char == CONTENT_EQUALITY_SIGN)
+						{
+							ret = memcmp((const void *)(parameter->key),(const void *)p_char,parameter->key_len);
+							if(ret == 0)
+							{
+								while(*p_value == CONTENT_SPACE_SIGN || *p_value == CONTENT_TAB_SIGN)
+								{
+									p_value++;
+								}
+								len = p_value - line;
+								memcpy(mod_line,line,len);
+								p_char = find_frist_endchar(mod_line);
+							
+								len = parameter->value_len + 1;
+								snprintf(p_char,len,"%s",parameter->value);
+								p_comma = str_frist_constchar(p_value,CONTENT_COMMA_SIGN);
+								if(p_comma)
+								
+{
+									p_char = find_frist_endchar(mod_line);
+									sprintf(p_char,"\t%s",p_comma);
+								}
+								memset(line,0,INIFILE_MAX_CONTENT_LINELEN);
+								sprintf(line,"%s\n",mod_line);
+								mod_flag = 1;
+							}
+						}
+					}
+					break;
+				case LINE_NOTE:
+					break;
+				case LINE_BLANK:
+					break;
+				case LINE_ERROR:
+					ret = INIFILE_FORMAT_ERROR;
+					goto error_out;
+					break;
+			}
+		}
+		len = str_int_len(line);
+		fwrite(line,INIFILE_SPACE_CHAR_LEN,len,wp);
+		memset(line,0,INIFILE_MAX_CONTENT_LINELEN);
+	}
+	ret = 0;
+error_out:
+	if(rp)
+		fclose(rp);
+	if(wp)
+		fclose(wp);
+	if(ret < 0)
+		delete_tmp_name_file(filename);
+	return ret;
+}
+
+int rewrite_after_add(const char *filename,INI_PARAMETER *parameter)
+{
+	int ret = 0,len = 0,flag = 0;
+	FILE *rp = NULL,*wp = NULL;
+	char tmp_name[INIFILE_FILEALL_NAME_LEN] = {0},*p_char = NULL,*q_char = NULL;
+	char line[INIFILE_MAX_CONTENT_LINELEN] = {0};
+	INI_FILE_LINE_TYPE type;
+
+	if(parameter->section == NULL)
+		return INIFILE_ERROR_PARAMETER;
+	if(parameter->section_len <= 0)
+		parameter->section_len = str_int_len(parameter->section);
+	sprintf(tmp_name,"%s%s",filename,tem_suff_name);
+	rp = fopen(filename,"r");
+	if(rp == NULL)
+	{
+		ret = INIFILE_NO_EXIST;
+		goto error_out;
+	}
+	wp = fopen(tmp_name,"w");
+	if(wp == NULL)
+	{
+		ret = INIFILE_NO_EXIST;
+		goto error_out;
+	}
+
+	if(parameter->key == NULL)
+	{
+		len = parameter->section_len + 1;
+		p_char = line;
+		*p_char = CONTENT_LEFT_BRACKET;
+		p_char++;
+		snprintf(p_char,len,"%s",parameter->section);
+		p_char = find_frist_endchar(p_char);
+		sprintf(p_char,"]\n\n");
+		len = str_int_len(line);
+		fwrite(line,INIFILE_SPACE_CHAR_LEN,len,wp);
+		memset(line,0,INIFILE_MAX_CONTENT_LINELEN);
+		flag = 1;
+	}else{
+		if(parameter->key_len <= 0)
+			parameter->key_len = str_int_len(parameter->key);
+		if(parameter->value_len <= 0)
+			parameter->value_len = str_int_len(parameter->value);
+	}
+	
+	while(fgets(line,INIFILE_MAX_CONTENT_LINELEN,rp) != NULL)
+	{
+		if(flag == 0)
+		{
+			type = judge_ini_file_linetype(line);
+			switch(type)
+			{
+				case LINE_SECTION:
+					p_char = str_frist_constchar(line,CONTENT_LEFT_BRACKET);
+					if(p_char == NULL)
+					{
+						ret = INIFILE_REWRITE_ERROR;
+						goto error_out;
+					}else
+						p_char++;
+					
+					q_char = p_char + parameter->section_len;
+					if(*q_char == CONTENT_RIGHT_BRACKET)
+					{
+						ret = memcmp((const void *)(parameter->section),(const void *)p_char,parameter->section_len);
+						if(ret == 0)
+						{
+							p_char = find_frist_endchar(p_char);
+							len = parameter->key_len + 1;
+							snprintf(p_char,len,"%s",parameter->key);
+							p_char = find_frist_endchar(p_char);
+							sprintf(p_char,"\t=\t");
+							p_char = find_frist_endchar(p_char);
+							len = parameter->value_len + 1;
+							snprintf(p_char,len,"%s",parameter->value);
+							p_char = find_frist_endchar(p_char);
+							*p_char = CONTENT_NEELINE_SIGN;
+							flag = 1;
+						
+}
+					}
+					break;
+				case LINE_KEYVALUE:
+					break;
+				case LINE_NOTE:
+					break;
+				case LINE_BLANK:
+					break;
+				case LINE_ERROR:
+					ret = INIFILE_FORMAT_ERROR;
+					goto error_out;
+					break;
+			}
+		}
+		len = str_int_len(line);
+		fwrite(line,INIFILE_SPACE_CHAR_LEN,len,wp);
+		memset(line,0,INIFILE_MAX_CONTENT_LINELEN);
+	}
+	ret = 0;
+error_out:
+	if(rp)
+		fclose(rp);
+	if(wp)
+		fclose(wp);
+	if(ret < 0)
+		delete_tmp_name_file(filename);
+	return ret;
+}
+
+int rewrite_after_delete(const char *filename,INI_PARAMETER *parameter)
+{
+	int ret = 0,flag = 0,len = 0;
+	FILE *rp = NULL,*wp = NULL;
+	char tmp_name[INIFILE_FILEALL_NAME_LEN] = {0},*p_char = NULL,*q_char = NULL;
+	char line[INIFILE_MAX_CONTENT_LINELEN] = {0},*p_value = NULL;
+	INI_FILE_LINE_TYPE type;
+
+	if(parameter->section == NULL)
+		return INIFILE_ERROR_PARAMETER;
+	if(parameter->section_len <= 0)
+		parameter->section_len = str_int_len(parameter->section);
+	sprintf(tmp_name,"%s%s",filename,tem_suff_name);
+	rp = fopen(filename,"r");
+	if(rp == NULL)
+	{
+		ret = INIFILE_NO_EXIST;
+		goto error_out;
+	}
+	wp = fopen(tmp_name,"w");
+	if(wp == NULL)
+	{
+		ret = INIFILE_NO_EXIST;
+		goto error_out;
+	}
+
+	while(fgets(line,INIFILE_MAX_CONTENT_LINELEN,rp) != NULL)
+	{
+		if(flag != 3)
+		{
+			type = judge_ini_file_linetype(line);
+			switch(type)
+			{
+				case LINE_SECTION:
+					p_char = str_frist_constchar(line,CONTENT_LEFT_BRACKET);
+					if(p_char == NULL)
+					{
+						ret = INIFILE_REWRITE_ERROR;
+						goto error_out;
+					}else
+						p_char++;
+
+					if(flag == 1)
+					{
+						flag = 3;
+						break;
+					}else if(flag ==2 )
+					{
+						PERROR("There is no found key value under section\n");	
+						flag = 3;
+						break;
+					}
+					
+					q_char = p_char + parameter->section_len;
+					if(*q_char == CONTENT_RIGHT_BRACKET)
+					{
+						ret = memcmp((const void *)(parameter->section),(const void *)p_char,parameter->section_len);
+						if(ret == 0)
+						{
+							if(parameter->key)
+							{
+								if(parameter->key_len <= 0)
+									parameter->key_len = str_int_len(parameter->key);
+								flag = 2;
+							}else{
+								flag = 1;
+							}
+							continue;
+						
+}
+					}
+					break;
+				case LINE_KEYVALUE:
+					if (flag == 1)
+						continue;
+					else if(flag == 2)
+					{
+						p_value = str_frist_constchar(line,CONTENT_EQUALITY_SIGN);
+						if(p_value == NULL)
+						{
+							ret = INIFILE_REWRITE_ERROR;
+							goto error_out;
+						}else{
+							p_char = line;
+							while(*p_char == CONTENT_SPACE_SIGN || *p_char == CONTENT_TAB_SIGN)
+							{
+								p_char++;
+							}
+						}
+
+						q_char = p_char + parameter->key_len;
+						if(*q_char == CONTENT_SPACE_SIGN || *q_char == CONTENT_TAB_SIGN || *q_char == CONTENT_EQUALITY_SIGN)
+						{
+							ret = memcmp((const void *)(parameter->key),(const void *)p_char,parameter->key_len);
+							if(ret == 0)
+							{
+								flag = 3;
+								continue;
+							}
+						}
+					}
+					break;
+				case LINE_NOTE:
+					break;
+				case LINE_BLANK:
+					break;
+				case LINE_ERROR:
+					ret = INIFILE_FORMAT_ERROR;
+					goto error_out;
+					break;
+			}
+		}
+		len = str_int_len(line);
+		fwrite(line,INIFILE_SPACE_CHAR_LEN,len,wp);
+		memset(line,0,INIFILE_MAX_CONTENT_LINELEN);
+	}
+error_out:
+	if(rp)
+		fclose(rp);
+	if(wp)
+		fclose(wp);
+	if(ret < 0)
+		delete_tmp_name_file(filename);
+	return ret;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int init_ini_file(const char *filename,int len)
 {
@@ -806,7 +1184,7 @@ error_out:
 
 int update_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 {
-	int ret,len;
+	int ret;
 	INI_FILE *p_ini_file = ini_array.ini_array;
 	INI_SETION *p_section = NULL;
 	INI_KEYVALUE *p_keyval = NULL;
@@ -830,12 +1208,10 @@ int update_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 		goto error_out;
 	}
 
-	if(parameter->value_len > 0)
-		len = parameter->value_len;
-	else
-		len = str_int_len(parameter->value);
+	if(parameter->value_len <= 0)
+		parameter->value_len = str_int_len(parameter->value);
 
-	ret = storage_char_memory(&p_keyval->value,parameter->value,len);
+	ret = storage_char_memory(&p_keyval->value,parameter->value,parameter->value_len);
 error_out:
 	pthread_mutex_unlock(&p_ini_file->file_lock);
 	return ret;
@@ -843,8 +1219,8 @@ error_out:
 
 int add_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 {
-	int ret,index;
-	char line[INIFILE_MAX_CONTENT_LINELEN] = {0};
+	int ret = 0,index = 0,len = 0;
+	char line[INIFILE_MAX_CONTENT_LINELEN] = {0},*p_char = NULL;
 	INI_FILE *p_ini_file = ini_array.ini_array;
 	INI_SETION *p_section = NULL;
 	INI_KEYVALUE *p_keyval = NULL,*p_key_end = NULL;
@@ -867,11 +1243,27 @@ int add_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 		ret = INIFILE_SECTION_ALREAD;
 		goto error_out;
 	}
-	sprintf(line,"%s=%s",parameter->key,parameter->value);
+	if(parameter->key_len <= 0)
+		parameter->key_len  = str_int_len(parameter->key);
+
+	if(parameter->value_len <= 0)
+		parameter->value_len = str_int_len(parameter->value);
+	
+	p_char = line;
+	len = parameter->key_len + 1;
+	snprintf(p_char,len,"%s",parameter->key);
+	p_char = find_frist_endchar(p_char);
+	*p_char = CONTENT_EQUALITY_SIGN;
+	p_char++;
+	len = parameter->value_len + 1;
+	snprintf(p_char,len,"%s",parameter->value);
+	
+	//sprintf(line,"%s=%s",parameter->key,parameter->value);
 	p_keyval = keyval_array.keyval_array;
-	index = init_line_key_val(line);
-	if(index < 0)
+	ret = init_line_key_val(line);
+	if(ret < 0)
 		goto error_out;
+	p_keyval += ret;
 	if(p_section->head)
 	{
 		p_key_end = p_section->head;
@@ -884,7 +1276,10 @@ int add_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 	}else{
 		p_section->head = p_keyval;
 	}
-	ret = 0;
+	ret = rewrite_after_add(p_ini_file->name,parameter);
+	if(ret < 0)
+		goto error_out;
+	ret = rewrite_after_update(p_ini_file->name,parameter);
 error_out:
 	pthread_mutex_unlock(&p_ini_file->file_lock);
 	return ret;
@@ -896,7 +1291,7 @@ int delete_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 	INI_FILE *p_ini_file = ini_array.ini_array;
 	INI_SETION *p_section = NULL;
 	INI_KEYVALUE *p_keyval = NULL;
-	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter->section || parameter->key || parameter->value)
+	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter->section || parameter->key )
 	{
 		PERROR("There is something wrong with inside paramter:::%d\n",ini_fd);
 		return INIFILE_ERROR_PARAMETER;
@@ -937,7 +1332,7 @@ int delete_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 	p_keyval->key = NULL;
 	p_keyval->value = NULL;
 	p_keyval->flag = STRUCT_NODE_UN_USED;
-	ret = 0;
+	ret = rewrite_after_delete(p_ini_file->name,parameter);
 error_out:
 	pthread_mutex_unlock(&p_ini_file->file_lock);
 	return ret;
@@ -1001,7 +1396,7 @@ int delete_ini_section(int ini_fd,INI_PARAMETER *parameter)
 			p_keyval = NULL;
 		}
 	}
-	ret = 0;
+	ret = rewrite_after_delete(p_ini_file->name,parameter);
 error_out:
 	pthread_mutex_unlock(&p_ini_file->file_lock);
 	return ret;
@@ -1009,8 +1404,8 @@ error_out:
 
 int add_ini_section(int ini_fd,INI_PARAMETER *parameter)
 {
-	int ret,index;
-	char line[INIFILE_MAX_CONTENT_LINELEN] = {0};
+	int ret = 0,len = 0;
+	char line[INIFILE_MAX_CONTENT_LINELEN] = {0},*p_char = NULL;
 	INI_FILE *p_ini_file = ini_array.ini_array;
 	INI_SETION *p_section = NULL,*p_sec_end = NULL;
 	INI_KEYVALUE *p_keyval = NULL;
@@ -1027,11 +1422,21 @@ int add_ini_section(int ini_fd,INI_PARAMETER *parameter)
 		ret = INIFILE_SECTION_ALREAD;
 		goto error_out;
 	}
-	sprintf(line,"[%s]",parameter->section);
-	index =init_line_section(line);
-	if(index < 0)
+	if(parameter->section_len <= 0)
+		parameter->section_len = str_int_len(parameter->section);
+	p_char = line;
+	*p_char = CONTENT_LEFT_BRACKET;
+	p_char++;
+	len = parameter->section_len + 1;
+	snprintf(p_char,len,"%s",parameter->section);
+	p_char = find_frist_endchar(p_char);
+	*p_char = CONTENT_RIGHT_BRACKET;
+	//sprintf(line,"[%s]",parameter->section);
+	ret =init_line_section(line);
+	if(ret < 0)
 		goto error_out;
 	p_section = section_array.section_array;
+	p_section += ret;
 	if(p_ini_file->head == NULL)
 		p_ini_file->head = p_section;
 	else{
@@ -1041,6 +1446,7 @@ int add_ini_section(int ini_fd,INI_PARAMETER *parameter)
 		p_sec_end->last = p_section;
 		p_section->pre = p_sec_end;
 	}
+	ret = rewrite_after_add(p_ini_file->name,parameter);
 error_out:
 	pthread_mutex_unlock(&p_ini_file->file_lock);
 	return ret;

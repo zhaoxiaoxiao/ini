@@ -20,6 +20,14 @@
 
 #define INIFILE_MEMORY_POOL_ERROR		-9
 #define INIFILE_MEMORY_POOL_OUT			-10
+
+#define INIFILE_SECTION_NOFOUND			-11
+#define INIFILE_KEYVALUE_NOFOUND		-12
+
+#define INIFILE_SECTION_ALREAD			-13
+#define INIFILE_KEYVALUE_ALREAD			-14
+
+#define INIFILE_REWRITE_ERROR			-15
 /**
 * operation parameter;
 * every buff char must be end of '\0'
@@ -36,7 +44,7 @@ typedef struct ini_parameter{
 
 int init_ini_file(const char *filename,int len);
 
-char *get_value_ofkey(int ini_fd,INI_PARAMETER *parameter);
+const char *get_value_ofkey(int ini_fd,INI_PARAMETER *parameter);
 
 int update_value_ofkey(int ini_fd,INI_PARAMETER *parameter);
 
