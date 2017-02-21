@@ -483,7 +483,7 @@ INI_KEYVALUE *find_keyvalue_unsect(INI_KEYVALUE *head,const char *key,int len)
 		c_len = str_int_len(p_key->key);
 		if(c_len == len)
 		{
-			ret = memcmp((const void *)(p_key->key),(const void *)(p_key->value),len);
+			ret = memcmp((const void *)(p_key->key),(const void *)(key),len);
 			if(ret == 0)
 				break;
 		}
@@ -518,7 +518,7 @@ int init_line_key_val(char *line)
 		pp = p_equ - INIFILE_SPACE_CHAR_LEN;
 		while(*pp == CONTENT_TAB_SIGN || *pp == CONTENT_SPACE_SIGN)
 			pp--;
-		if(pp <= p)
+		if(pp < p)
 		{
 			ret = INIFILE_FORMAT_ERROR;
 			goto error_out;
@@ -540,7 +540,7 @@ int init_line_key_val(char *line)
 		p = p_equ + INIFILE_SPACE_CHAR_LEN;
 		while(*p == CONTENT_TAB_SIGN || *p == CONTENT_SPACE_SIGN)
 			p++;
-		if(pp <= p)
+		if(pp < p)
 		{
 			ret = INIFILE_FORMAT_ERROR;
 			goto error_out;
@@ -594,17 +594,24 @@ int init_line_section(char *line)
 		return index;
 	p_section += index;
 
-	if(p_brack && q_brack && p_brack < q_brack)
+	if(p_brack && q_brack)
 	{
-		len = q_brack - p_brack + INIFILE_SPACE_CHAR_LEN;
-		ret = storage_char_memory(&(p_section->sec),p_brack,len);
-		if(ret < 0)
-			goto error_out;
-		return index;
+		p_brack++;q_brack--;
+		if(p_brack < q_brack)
+		{
+			len = q_brack - p_brack + INIFILE_SPACE_CHAR_LEN;
+			ret = storage_char_memory(&(p_section->sec),p_brack,len);
+			if(ret < 0)
+				goto error_out;
+			ret = index;
+		}else
+			ret = INIFILE_FORMAT_ERROR;
+	}else{
+		ret = INIFILE_FORMAT_ERROR;
 	}
-	return INIFILE_FORMAT_ERROR;
 error_out:
-	p_section->flag = STRUCT_NODE_UN_USED;
+	if(ret < 0)
+		p_section->flag = STRUCT_NODE_UN_USED;
 	return ret;
 }
 
@@ -614,8 +621,8 @@ int init_every_line_inifile(int ini_fd,char *line)
 	INI_FILE_LINE_TYPE type;
 	INI_FILE *p_file = ini_array.ini_array;
 	p_file += ini_fd;
-	INI_SETION *p_section = p_file->head,*n_section = section_array.section_array;
-	INI_KEYVALUE *p_key = NULL,*n_key = keyval_array.keyval_array;
+	INI_SETION *p_section = p_file->head,*n_section = section_array.section_array,*f_section = NULL;
+	INI_KEYVALUE *p_key = NULL,*n_key = keyval_array.keyval_array,*f_key = NULL;
 	
 	type = judge_ini_file_linetype(line);
 	switch(type)
@@ -625,41 +632,54 @@ int init_every_line_inifile(int ini_fd,char *line)
 			if(ret >= 0)
 			{
 				n_section += ret;
-				if(p_section == NULL)
-					p_file->head = n_section;
-				else{
-					while(p_section->last)
-						p_section = p_section->last;
-					p_section->last = n_section;
-					n_section->pre = p_section;
-					n_section->last = NULL;
+				f_section = find_inifile_section(p_section,n_section->sec,0);
+				if(f_section)
+				{
+					ret = INIFILE_FORMAT_ERROR;
+					n_section->flag = STRUCT_NODE_UN_USED;
+				}else{
+					if(p_section == NULL)
+						p_file->head = n_section;
+					else{
+						while(p_section->last)
+							p_section = p_section->last;
+						p_section->last = n_section;
+						n_section->pre = p_section;
+						n_section->last = NULL;
+					}
 				}
 			}
 			break;
 		case LINE_KEYVALUE:
-			ret = init_line_key_val(line);
-			if(ret >= 0)
+			if(p_section)
 			{
-				n_key += ret;
-				if(p_section == NULL)
+				while(p_section->last)
+					p_section = p_section->last;
+				p_key = p_section->head;
+				
+				ret = init_line_key_val(line);
+				if(ret >= 0)
 				{
-					n_key->flag = STRUCT_NODE_UN_USED;
-					ret = INIFILE_FORMAT_ERROR;
-				}else{
-					while(p_section->last)
-						p_section = p_section->last;
-					p_key = p_section->head;
-					if(p_key == NULL)
-						p_section->head = n_key;
-					else{
-						while(p_key->last)
-							p_key= p_key->last;
-						p_key->last = n_key;
-						n_key->pre = p_key;
-						n_key->last = NULL;
+					n_key += ret;
+					f_key = find_keyvalue_unsect(p_key,n_key->key,0);
+					if(f_key)
+					{
+						n_key->flag = STRUCT_NODE_UN_USED;
+						ret = INIFILE_FORMAT_ERROR;
+					}else{
+						if(p_key == NULL)
+							p_section->head = n_key;
+						else{
+							while(p_key->last)
+								p_key= p_key->last;
+							p_key->last = n_key;
+							n_key->pre = p_key;
+							n_key->last = NULL;
+						}
 					}
 				}
-			}
+			}else
+				ret = INIFILE_FORMAT_ERROR;
 			break;
 		case LINE_NOTE:
 			break;
@@ -829,6 +849,7 @@ int rewrite_after_update(const char *filename,INI_PARAMETER *parameter)
 							ret = memcmp((const void *)(parameter->key),(const void *)p_char,parameter->key_len);
 							if(ret == 0)
 							{
+								p_value++;
 								while(*p_value == CONTENT_SPACE_SIGN || *p_value == CONTENT_TAB_SIGN)
 								{
 									p_value++;
@@ -875,6 +896,8 @@ error_out:
 		fclose(wp);
 	if(ret < 0)
 		delete_tmp_name_file(filename);
+	else
+		re_name_ini_file(filename);
 	return ret;
 }
 
@@ -985,6 +1008,8 @@ error_out:
 		fclose(wp);
 	if(ret < 0)
 		delete_tmp_name_file(filename);
+	else
+		re_name_ini_file(filename);
 	return ret;
 }
 
@@ -1111,6 +1136,8 @@ error_out:
 		fclose(wp);
 	if(ret < 0)
 		delete_tmp_name_file(filename);
+	else
+		re_name_ini_file(filename);
 	return ret;
 }
 
@@ -1157,10 +1184,10 @@ const char *get_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 	INI_SETION *p_section = NULL;
 	INI_KEYVALUE *p_keyval = NULL;
 	
-	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM)
+	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter == NULL || parameter->section == NULL || parameter->key == NULL)
 	{
 		PERROR("There is something wrong with inside paramter:::%d\n",ini_fd);
-		return;
+		return NULL;
 	}
 	p_ini_file += ini_fd;
 	pthread_mutex_lock(&p_ini_file->file_lock);
@@ -1188,7 +1215,8 @@ int update_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 	INI_FILE *p_ini_file = ini_array.ini_array;
 	INI_SETION *p_section = NULL;
 	INI_KEYVALUE *p_keyval = NULL;
-	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter->section || parameter->key || parameter->value)
+	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter == NULL 
+		|| parameter->section == NULL || parameter->key == NULL || parameter->value == NULL)
 	{
 		PERROR("There is something wrong with inside paramter:::%d\n",ini_fd);
 		return INIFILE_ERROR_PARAMETER;
@@ -1212,6 +1240,9 @@ int update_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 		parameter->value_len = str_int_len(parameter->value);
 
 	ret = storage_char_memory(&p_keyval->value,parameter->value,parameter->value_len);
+	if(ret < 0)
+		goto error_out;
+	ret = rewrite_after_update(p_ini_file->name,parameter);
 error_out:
 	pthread_mutex_unlock(&p_ini_file->file_lock);
 	return ret;
@@ -1224,7 +1255,8 @@ int add_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 	INI_FILE *p_ini_file = ini_array.ini_array;
 	INI_SETION *p_section = NULL;
 	INI_KEYVALUE *p_keyval = NULL,*p_key_end = NULL;
-	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter->section || parameter->key || parameter->value)
+	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter == NULL 
+		|| parameter->section == NULL || parameter->key == NULL || parameter->value == NULL)
 	{
 		PERROR("There is something wrong with inside paramter:::%d\n",ini_fd);
 		return INIFILE_ERROR_PARAMETER;
@@ -1232,54 +1264,52 @@ int add_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 	p_ini_file += ini_fd;
 	pthread_mutex_lock(&p_ini_file->file_lock);
 	p_section = find_inifile_section(p_ini_file->head,parameter->section,parameter->section_len);
-	if(p_section == NULL)
+	if(p_section)
 	{
-		ret = INIFILE_SECTION_NOFOUND;
-		goto error_out;
-	}
-	p_keyval = find_keyvalue_unsect(p_section->head,parameter->key,parameter->key_len);
-	if(p_keyval)
-	{
-		ret = INIFILE_SECTION_ALREAD;
-		goto error_out;
-	}
-	if(parameter->key_len <= 0)
-		parameter->key_len  = str_int_len(parameter->key);
-
-	if(parameter->value_len <= 0)
-		parameter->value_len = str_int_len(parameter->value);
-	
-	p_char = line;
-	len = parameter->key_len + 1;
-	snprintf(p_char,len,"%s",parameter->key);
-	p_char = find_frist_endchar(p_char);
-	*p_char = CONTENT_EQUALITY_SIGN;
-	p_char++;
-	len = parameter->value_len + 1;
-	snprintf(p_char,len,"%s",parameter->value);
-	
-	//sprintf(line,"%s=%s",parameter->key,parameter->value);
-	p_keyval = keyval_array.keyval_array;
-	ret = init_line_key_val(line);
-	if(ret < 0)
-		goto error_out;
-	p_keyval += ret;
-	if(p_section->head)
-	{
-		p_key_end = p_section->head;
-		while(p_key_end->last)
+		p_keyval = find_keyvalue_unsect(p_section->head,parameter->key,parameter->key_len);
+		if(p_keyval == NULL)
 		{
-			p_key_end = p_key_end->last;
-		}
-		p_key_end->last = p_keyval;
-		p_keyval->pre = p_key_end;
-	}else{
-		p_section->head = p_keyval;
-	}
-	ret = rewrite_after_add(p_ini_file->name,parameter);
-	if(ret < 0)
-		goto error_out;
-	ret = rewrite_after_update(p_ini_file->name,parameter);
+			if(parameter->key_len <= 0)
+				parameter->key_len  = str_int_len(parameter->key);
+
+			if(parameter->value_len <= 0)
+				parameter->value_len = str_int_len(parameter->value);
+	
+			p_char = line;
+			len = parameter->key_len + 1;
+			snprintf(p_char,len,"%s",parameter->key);
+			p_char = find_frist_endchar(p_char);
+			*p_char = CONTENT_EQUALITY_SIGN;
+			p_char++;
+			len = parameter->value_len + 1;
+			snprintf(p_char,len,"%s",parameter->value);
+	
+			//sprintf(line,"%s=%s",parameter->key,parameter->value);
+			p_keyval = keyval_array.keyval_array;
+			ret = init_line_key_val(line);
+			if(ret < 0)
+				goto error_out;
+			p_keyval += ret;
+			if(p_section->head)
+			{
+				p_key_end = p_section->head;
+				while(p_key_end->last)
+				{
+					p_key_end = p_key_end->last;
+				}
+				p_key_end->last = p_keyval;
+				p_keyval->pre = p_key_end;
+			}else{
+				p_section->head = p_keyval;
+			}
+			ret = rewrite_after_add(p_ini_file->name,parameter);
+			if(ret < 0)
+				goto error_out;
+			ret = rewrite_after_add(p_ini_file->name,parameter);
+		}else
+			ret = INIFILE_KEYVALUE_ALREAD;
+	}else
+		ret = INIFILE_SECTION_NOFOUND;
 error_out:
 	pthread_mutex_unlock(&p_ini_file->file_lock);
 	return ret;
@@ -1291,7 +1321,8 @@ int delete_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 	INI_FILE *p_ini_file = ini_array.ini_array;
 	INI_SETION *p_section = NULL;
 	INI_KEYVALUE *p_keyval = NULL;
-	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter->section || parameter->key )
+	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter == NULL 
+		|| parameter->section == NULL || parameter->key == NULL )
 	{
 		PERROR("There is something wrong with inside paramter:::%d\n",ini_fd);
 		return INIFILE_ERROR_PARAMETER;
@@ -1344,7 +1375,7 @@ int delete_ini_section(int ini_fd,INI_PARAMETER *parameter)
 	INI_FILE *p_ini_file = ini_array.ini_array;
 	INI_SETION *p_section = NULL;
 	INI_KEYVALUE *p_keyval = NULL;
-	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter->section || parameter->key || parameter->value)
+	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter == NULL || parameter->section == NULL)
 	{
 		PERROR("There is something wrong with inside paramter:::%d\n",ini_fd);
 		return INIFILE_ERROR_PARAMETER;
@@ -1409,7 +1440,8 @@ int add_ini_section(int ini_fd,INI_PARAMETER *parameter)
 	INI_FILE *p_ini_file = ini_array.ini_array;
 	INI_SETION *p_section = NULL,*p_sec_end = NULL;
 	INI_KEYVALUE *p_keyval = NULL;
-	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter->section || parameter->key || parameter->value)
+	if(ini_fd < 0 || ini_fd >= MAX_OPERATION_FILE_NUM || parameter == NULL ||
+		parameter->section == NULL)
 	{
 		PERROR("There is something wrong with inside paramter:::%d\n",ini_fd);
 		return INIFILE_ERROR_PARAMETER;
@@ -1417,36 +1449,35 @@ int add_ini_section(int ini_fd,INI_PARAMETER *parameter)
 	p_ini_file += ini_fd;
 	pthread_mutex_lock(&p_ini_file->file_lock);
 	p_section = find_inifile_section(p_ini_file->head,parameter->section,parameter->section_len);
-	if(p_section)
+	if(p_section == NULL)
 	{
+		if(parameter->section_len <= 0)
+			parameter->section_len = str_int_len(parameter->section);
+		p_char = line;
+		*p_char = CONTENT_LEFT_BRACKET;
+		p_char++;
+		len = parameter->section_len + 1;
+		snprintf(p_char,len,"%s",parameter->section);
+		p_char = find_frist_endchar(p_char);
+		*p_char = CONTENT_RIGHT_BRACKET;
+		//sprintf(line,"[%s]",parameter->section);
+		ret =init_line_section(line);
+		if(ret < 0)
+			goto error_out;
+		p_section = section_array.section_array;
+		p_section += ret;
+		if(p_ini_file->head == NULL)
+			p_ini_file->head = p_section;
+		else{
+			p_sec_end = p_ini_file->head;
+			while(p_sec_end->last)
+				p_sec_end = p_sec_end->last;
+			p_sec_end->last = p_section;
+			p_section->pre = p_sec_end;
+		}
+		ret = rewrite_after_add(p_ini_file->name,parameter);
+	}else
 		ret = INIFILE_SECTION_ALREAD;
-		goto error_out;
-	}
-	if(parameter->section_len <= 0)
-		parameter->section_len = str_int_len(parameter->section);
-	p_char = line;
-	*p_char = CONTENT_LEFT_BRACKET;
-	p_char++;
-	len = parameter->section_len + 1;
-	snprintf(p_char,len,"%s",parameter->section);
-	p_char = find_frist_endchar(p_char);
-	*p_char = CONTENT_RIGHT_BRACKET;
-	//sprintf(line,"[%s]",parameter->section);
-	ret =init_line_section(line);
-	if(ret < 0)
-		goto error_out;
-	p_section = section_array.section_array;
-	p_section += ret;
-	if(p_ini_file->head == NULL)
-		p_ini_file->head = p_section;
-	else{
-		p_sec_end = p_ini_file->head;
-		while(p_sec_end->last)
-			p_sec_end = p_sec_end->last;
-		p_sec_end->last = p_section;
-		p_section->pre = p_sec_end;
-	}
-	ret = rewrite_after_add(p_ini_file->name,parameter);
 error_out:
 	pthread_mutex_unlock(&p_ini_file->file_lock);
 	return ret;
@@ -1542,11 +1573,34 @@ void ini_file_info_out(int ini_fd)
 
 int main(int argc, char *argv[])
 {
-	int fd = 0;
+	int fd = 0,ret = 0;
+	const char *value = NULL;
+	char in_sec[] = "xiaoxiao",add_sec[] = "jinyu";
+	char in_key[] = "name",add_key[] = "lover";
+	char up_value[] = "goodman",add_value[] = "yunying";
+	INI_PARAMETER ini_parameter = {0};
+	
 	fd = init_ini_file("test.ini",0);
 	if(fd < 0)
 		return fd;
 	ini_file_info_out(fd);
+#if 0
+	ini_parameter.section = in_sec;
+	ini_parameter.key = in_key;
+	ini_parameter.value = up_value;
+	value = get_value_ofkey(fd,&ini_parameter);
+	if(value)
+		printf("value:: %s\n",value);
+	update_value_ofkey(fd,&ini_parameter);
+	ini_file_info_out(fd);
+#endif
+	ini_parameter.section = add_sec;
+	ini_parameter.key = NULL;
+	ini_parameter.value = NULL;
+	ret = add_ini_section(fd,&ini_parameter);
+	PDEBUG("ret :: %d\n",ret);
+	ini_file_info_out(fd);
+	
 	destroy_ini_source(fd);
 	return 0;
 }
