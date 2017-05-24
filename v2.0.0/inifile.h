@@ -1,6 +1,6 @@
 
 
-#define MAX_OPERATION_FILE_NUM			2
+#define MAX_OPERATION_FILE_NUM			2//The macro define max inifile can operation same time
 #define MAX_INIFILE_SECTION_NUM			10
 #define MAX_KEYVALUE_UNDER_SECTION		10
 
