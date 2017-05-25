@@ -91,7 +91,8 @@ void* thread_routine(void *arg)
 		if(curr_job->call)
 			curr_job->call(curr_job->arg);
 
-		curr_job->call = curr_job->arg = NULL;
+		curr_job->call = NULL;
+		curr_job->arg = NULL;
 		post_job_free_num();
 		if(thread_pool_.is_quit)
 			break;
@@ -168,8 +169,8 @@ int frame_add_job_queue(THREAD_POOL_JOB *tp_job)
 	second =after - before;
 
 	curr_job = &thread_pool_.q_head[index];
-	curr_job->arg = tp_job.arg;
-	curr_job->call = tp_job.call;
+	curr_job->arg = tp_job->arg;
+	curr_job->call = tp_job->call;
 	post_job_valid_num();
 }
 

@@ -1,4 +1,6 @@
 
+#include <pwd.h>
+#include <sys/types.h>
 #include <sys/file.h>
 
 #include "common.h"
@@ -154,7 +156,7 @@ char* framestr_first_conststr(char *str,const char *tar)
 		return NULL;
 	
 	do{
-		p_for = str_frist_constchar(p,tar_fri);
+		p_for = framestr_frist_constchar(p,tar_fri);
 		if(!p_for)
 			return NULL;
 		else
@@ -185,4 +187,29 @@ char* framestr_first_conststr(char *str,const char *tar)
 	return NULL;
 }
 
+char *current_user_name(char *name,int len)
+{
+	//uid_t my_uid;
+	int name_len = 0;
+	struct passwd *my_info = NULL;
+
+	my_info = getpwuid( getuid() );
+
+	printf( "my name = [%s]\n", my_info->pw_name );
+	printf( "my passwd = [%s]\n", my_info->pw_passwd );
+	printf( "my uid = [%d]\n", my_info->pw_uid );
+	printf( "my gid = [%d]\n", my_info->pw_gid );
+	printf( "my gecos = [%s]\n", my_info->pw_gecos );
+	printf( "my dir = [%s]\n", my_info->pw_dir );
+	printf( "my shell = [%s]\n", my_info->pw_shell );
+
+	name_len = frame_strlen(my_info->pw_name);
+	if(name_len >= len)
+	{
+		return NULL;
+	}
+
+	strcpy(name,my_info->pw_name);
+	return name;
+}
 

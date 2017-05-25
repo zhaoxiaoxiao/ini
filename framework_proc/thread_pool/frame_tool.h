@@ -26,6 +26,8 @@ char* framestr_last_constchar(char *str,const char c);
 
 char* framestr_first_conststr(char *str,const char *tar);
 
+char *current_user_name(char *name,int len);
+
 #ifdef __cplusplus
 }
 #endif
