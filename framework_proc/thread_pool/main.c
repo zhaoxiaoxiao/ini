@@ -1,6 +1,7 @@
 
 #include "cmd_shell.h"
 #include "common.h"
+#include "log_mini.h"
 
 void sig_catch(int sig)
 {
@@ -31,6 +32,9 @@ int main(int argc, char *argv[])
 	(void)signal(SIGSEGV, sig_catch);//memory
 	(void)signal(SIGTERM, sig_catch);//kill
 
+	PERROR("sdasdada\n");
+	LOG_DEBUG("xiaoxiao is good boy\n");
+	LOG_INFO("sdasdada\n");
 	cmd_shell_input(NULL);
 	return 0;
 }

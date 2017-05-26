@@ -213,3 +213,9 @@ char *current_user_name(char *name,int len)
 	return name;
 }
 
+char *frame_getcwd(char *cwd,int len)
+{
+	return getcwd(cwd,len); 
+}
+
+

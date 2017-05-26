@@ -25,6 +25,7 @@ LOCAL_SRC_CFILES := \
 		frame_thread_pool.c	\
 		frame_time.c		\
 		frame_tool.c		\
+		log_mini.c		\
 
 LOCAL_SRC_CCFILES := \
 
