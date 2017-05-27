@@ -14,3 +14,27 @@ unsigned long get_nowtime_second()
 	return second;
 }
 
+char* get_nowdate_str(char *str,int len)
+{
+	
+}
+
+
+void gettimespace()
+{
+	struct timespec time1 = {0, 0};
+
+	clock_gettime(CLOCK_REALTIME, &time1);//1970-1-1 0:0:0
+	clock_gettime(CLOCK_MONOTONIC, &time1);//machine start time
+	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time1);//process start time
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time1);//thread start time
+	
+}
+
+void gettimeval()
+{
+	struct timeval tval = {0};
+
+	gettimeofday(&tval,NULL);
+}
+

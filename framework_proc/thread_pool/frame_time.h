@@ -7,7 +7,9 @@
 extern "C" {
 #endif
 
+unsigned long get_nowtime_second();
 
+char* get_nowdate_str(char *str,int len);
 #ifdef __cplusplus
 }
 #endif
