@@ -1,4 +1,7 @@
 
+#include <math.h>
+#include <sched.h>
+#include <pthread.h>
 #include <sys/sysinfo.h>
 
 #include "common.h"
@@ -67,6 +70,6 @@ void process_setaffinity(void *arg)
 		}  
 	}  
 
-	return NULL;
+	return;
 }
 

@@ -13,7 +13,7 @@ CFLAGS :=
 
 INCLUDE := #-I./include -I/usr/local/log4c/include
 LDFLAGS := #-L/usr/lib64/mysql -L/usr/local/log4c/lib -L/usr/local/lib
-LIBRARY := -pthread #-lmysqlclient -llog4c
+LIBRARY := -pthread -lrt #-lmysqlclient -llog4c
 
 BUILD_DIR = $(MODULE)_build
 
@@ -26,6 +26,9 @@ LOCAL_SRC_CFILES := \
 		frame_time.c		\
 		frame_tool.c		\
 		log_mini.c		\
+		bind_cpu_core.c		\
+		daemon_process.c	\
+		lottery.c		\
 
 LOCAL_SRC_CCFILES := \
 
