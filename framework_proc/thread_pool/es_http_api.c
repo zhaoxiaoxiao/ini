@@ -40,7 +40,9 @@ int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type)
 	int ret = 0;
 	
 	memset(&es_info,0,sizeof(ES_SERVER_INFO));
-	
+
+	if(ip_str == NULL)
+		return -1;
 	es_info.type_ = type;
 	es_info.es_fd_ = socket_tcp_ipv4();
 	if(es_info.es_fd_ < 0)
@@ -58,13 +60,50 @@ void es_server_query(VERB_METHOD verb,const char *path_str,const char *query_str
 	int body_len = 0,ret = 0;
 	char buff[SOCKET_BUFF_LEN] = {0},r_buf[SOCKET_BUFF_LEN] = {0};
 
-	body_len = frame_strlen(body_str);
-	sprintf(buff,"%s %s?%s %s\r\n\
+	if(path_str == NULL)
+		return;
+	if(query_str && body_str)
+	{
+		body_len = frame_strlen(body_str);
+		//text/html;
+		sprintf(buff,"%s %s?%s %s\r\n\
 User-Agent: ES-HTTP-API\r\n\
-Accept: text/html, image/gif, image/jpeg, *; q=.2, *//*; q=.2\r\n\
+Content-type: application/json;charset=UTF-8\r\n\
+Host: %s:%d\r\n\
+Accept: text/html, application/json, image/gif, image/jpeg, *; q=.2, *//*; q=.2\r\n\
 Connection: keep-alive\r\n\
 Content-Length: %d\r\n\r\n\
-%s",verb_str_arr[verb],path_str,query_str,protocol_str[es_info.type_],body_len,body_str);
+%s",verb_str_arr[verb],path_str,query_str,protocol_str[es_info.type_],es_info.ip_addr,es_info.port_,body_len,body_str);
+	}else if(query_str)
+	{
+		sprintf(buff,"%s %s?%s %s\r\n\
+User-Agent: ES-HTTP-API\r\n\
+Content-type: application/json;charset=UTF-8\r\n\
+Host: %s:%d\r\n\
+Accept: text/html, application/json, image/gif, image/jpeg, *; q=.2, *//*; q=.2\r\n\
+Connection: keep-alive\r\n\
+Content-Length: %d\r\n\r\n",verb_str_arr[verb],path_str,query_str,protocol_str[es_info.type_],es_info.ip_addr,es_info.port_,body_len);
+	}else if(body_str)
+	{
+		body_len = frame_strlen(body_str);
+		//text/html;
+		sprintf(buff,"%s %s %s\r\n\
+User-Agent: ES-HTTP-API\r\n\
+Content-type: application/json;charset=UTF-8\r\n\
+Host: %s:%d\r\n\
+Accept: text/html, application/json, image/gif, image/jpeg, *; q=.2, *//*; q=.2\r\n\
+Connection: keep-alive\r\n\
+Content-Length: %d\r\n\r\n\
+%s",verb_str_arr[verb],path_str,protocol_str[es_info.type_],es_info.ip_addr,es_info.port_,body_len,body_str);
+	}else{
+		sprintf(buff,"%s %s %s\r\n\
+User-Agent: ES-HTTP-API\r\n\
+Content-type: application/json;charset=UTF-8\r\n\
+Host: %s:%d\r\n\
+Accept: text/html, application/json, image/gif, image/jpeg, *; q=.2, *//*; q=.2\r\n\
+Connection: keep-alive\r\n\
+Content-Length: %d\r\n\r\n",verb_str_arr[verb],path_str,protocol_str[es_info.type_],es_info.ip_addr,es_info.port_,body_len);
+	}
 	printf("%s\n\n",buff);
 send:
 	ret = tcp_client_send(es_info.es_fd_,buff);
