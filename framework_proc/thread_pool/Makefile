@@ -29,6 +29,8 @@ LOCAL_SRC_CFILES := \
 		bind_cpu_core.c		\
 		daemon_process.c	\
 		lottery.c		\
+		socket_api.c		\
+		es_http_api.c		\
 
 LOCAL_SRC_CCFILES := \
 
