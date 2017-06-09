@@ -1,11 +1,17 @@
 
+#include <pthread.h>
+#include <semaphore.h>
+
 #include "common.h"
 #include "es_http_api.h"
 #include "socket_api.h"
 #include "frame_tool.h"
+#include "memory_pool.h"
 
-#define SOCKET_BUFF_LEN		(1024)
-#define SOCKET_BUF_RECV		(SOCKET_BUFF_LEN - 1)
+#define SOCKET_BUFF_LEN			(1024)
+#define SOCKET_BUF_RECV			(SOCKET_BUFF_LEN - 1)
+
+#define ES_RESPOND_ARRAY_LEN	(10)
 
 static const char *verb_str_arr[] = {
 	"GET",
@@ -23,22 +29,115 @@ static const char *protocol_str[] = {
 typedef struct es_server_info{
 	char ip_addr[16];
 	int es_fd_;
+	int es_fd_asy;
+
+	int req_index,res_index,insert_req_sub;
+	sem_t free_num,active_num;
 	
 	PROTOCOL_TYPE type_;
 	unsigned short port_;
 
+	
 }ES_SERVER_INFO;
 
 static ES_SERVER_INFO es_info = {0};
+static ES_RESPOND es_res_array[ES_RESPOND_ARRAY_LEN] = {0};
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////
 int es_server_connect()
 {
 	return connect_tcp_server(es_info.es_fd_,es_info.port_,es_info.ip_addr);
 }
 
+int get_req_index()
+{
+	int index = 0;
+	sem_wait(&es_info.active_num);
+	index = es_info.req_index;
+	es_info.req_index++;
+	if(es_info.req_index >= ES_RESPOND_ARRAY_LEN)
+		es_info.req_index = 0;
+	return index;
+}
+
+int get_insert_req_index()
+{
+	int index = 0;
+	sem_wait(&es_info.free_num);
+	index = es_info.insert_req_sub;
+	es_info.insert_req_sub++;
+	if(es_info.insert_req_sub >= ES_RESPOND_ARRAY_LEN)
+		es_info.insert_req_sub = 0;
+	return index;
+}
+
+void es_server_send(void *data)
+{
+	int ret = 0,req_index = 0;
+	ES_RESPOND *p_res = NULL;
+
+	while(1)
+	{
+		req_index = get_req_index();
+		p_res = es_res_array + req_index;
+		ret = tcp_client_send(es_info.es_fd_,p_res->req_buf);
+		if(ret == 0)
+		{
+			ret = es_server_connect();
+			if(ret < 0)
+			{
+				break;
+			}else{
+				continue;
+			}
+		}
+		
+	}
+}
+
+void es_server_recv(void *data)
+{
+	int ret = 0,is_end = 0;
+	char r_buf[SOCKET_BUFF_LEN] = {0};
+	ES_RESPOND *p_res = NULL;
+
+	while(1)
+	{
+		if(is_end == 0)
+		{
+			is_end = 1;
+			if(es_info.res_index > es_info.req_index)
+			{
+				PERROR();
+				
+			}
+			p_res = es_res_array + es_info.res_index;
+			
+		}
+		ret = tcp_client_recv(es_info.es_fd_,r_buf,SOCKET_BUF_RECV);
+		if(ret <= 0)
+		{
+			ret = es_server_connect();
+			if(ret < 0)
+			{
+				break;
+			}else{
+				continue;
+			}
+		}
+		printf("%s",r_buf);
+		
+		if(ret < SOCKET_BUF_RECV)
+		{
+			is_end = 0;
+		}
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
 int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type)
 {
-	int ret = 0;
+	int ret = 0,i = 0;
 	
 	memset(&es_info,0,sizeof(ES_SERVER_INFO));
 
@@ -54,59 +153,12 @@ int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type)
 	ret = es_server_connect();
 	if(ret < 0)
 		return ret;
+
+	for(i = 0;i < ES_RESPOND_ARRAY_LEN;i++)
+	{
+		
+	}
 }
-
-int make_http_post_json(char *h_buf,int len,char *path,char *body_str)
-{
-	int h_buf_len = 0;
-	h_buf_len = frame_strlen(body_str);
-	snprintf(h_buf,len,"POST %s HTTP/1.1\r\n\
-User-Agent: ES-HTTP-API\r\n\
-Content-type: application/json;charset=UTF-8\r\n\
-Host: %s:%d\r\n\
-Accept: application/json, image/gif, image/jpeg, *; q=.2, *//*; q=.2\r\n\
-Connection: keep-alive\r\n\
-Content-Length: %d\r\n\r\n\
-%s",path,es_info.ip_addr,es_info.port_,h_buf_len,body_str);
-
-	h_buf_len = frame_strlen(h_buf);
-	return h_buf_len;
-}
-
-int make_http_post_text(char *h_buf,int len,char *path,char *body_str)
-{
-	int h_buf_len = 0;
-	h_buf_len = frame_strlen(body_str);
-	snprintf(h_buf,len,"POST %s HTTP/1.1\r\n\
-User-Agent: ES-HTTP-API\r\n\
-Content-type: application/json;charset=UTF-8\r\n\
-Host: %s:%d\r\n\
-Accept: text/html, image/gif, image/jpeg, *; q=.2, *//*; q=.2\r\n\
-Connection: keep-alive\r\n\
-Content-Length: %d\r\n\r\n\
-%s",path,es_info.ip_addr,es_info.port_,h_buf_len,body_str);
-
-	h_buf_len = frame_strlen(h_buf);
-	return h_buf_len;
-}
-
-int make_http_get_test(char *h_buf,int len,char *path)
-{
-	int h_buf_len = 0;
-	h_buf_len = frame_strlen(body_str);
-	snprintf(h_buf,len,"GET %s HTTP/1.1\r\n\
-Host: %s:%d\r\n\
-Connection: keep-alive\r\n\
-Upgrade-Insecure-Requests: 1\
-User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.86 Safari/537.36\
-Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8\
-Accept-Encoding: gzip, deflate\
-Accept-Language: zh-CN,zh;q=0.8",path,es_info.ip_addr,es_info.port_);
-
-	h_buf_len = frame_strlen(h_buf);
-	return h_buf_len;
-}
-
 
 void es_server_query(VERB_METHOD verb,const char *path_str,const char *query_str,const char *body_str)
 {
@@ -191,6 +243,9 @@ recv:
 		goto recv;
 }
 
+void es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
+{
+}
 
 void es_server_destroy()
 {

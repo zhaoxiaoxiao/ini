@@ -31,6 +31,8 @@ LOCAL_SRC_CFILES := \
 		lottery.c		\
 		socket_api.c		\
 		es_http_api.c		\
+		key_value_part.c	\
+		memory_pool.c		\
 
 LOCAL_SRC_CCFILES := \
 

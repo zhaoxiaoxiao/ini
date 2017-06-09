@@ -28,6 +28,9 @@ char* framestr_first_conststr(char *str,const char *tar);
 
 char *current_user_name(char *name,int len);
 
+
+size_t get_system_pagesize();
+
 #ifdef __cplusplus
 }
 #endif

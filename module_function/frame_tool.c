@@ -218,4 +218,10 @@ char *frame_getcwd(char *cwd,int len)
 	return getcwd(cwd,len); 
 }
 
-
+size_t get_system_pagesize()
+{
+	size_t page = 0;
+	page = getpagesize();
+	PDEBUG("page size = %d Byte\n",page);
+	return page;
+}
