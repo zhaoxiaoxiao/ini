@@ -4,7 +4,8 @@
 #include "socket_api.h"
 #include "frame_tool.h"
 
-#define SOCKET_BUFF_LEN		1024
+#define SOCKET_BUFF_LEN		(1024)
+#define SOCKET_BUF_RECV		(SOCKET_BUFF_LEN - 1)
 
 static const char *verb_str_arr[] = {
 	"GET",
@@ -58,7 +59,7 @@ int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type)
 void es_server_query(VERB_METHOD verb,const char *path_str,const char *query_str,const char *body_str)
 {
 	int body_len = 0,ret = 0;
-	char buff[SOCKET_BUFF_LEN] = {0},r_buf[SOCKET_BUFF_LEN] = {0};
+	char buff[SOCKET_BUFF_LEN] = {0},r_buf[SOCKET_BUFF_LEN] = {0},*p_char = r_buf + SOCKET_BUFF_LEN;
 
 	if(path_str == NULL)
 		return;
@@ -104,7 +105,8 @@ Accept: text/html, application/json, image/gif, image/jpeg, *; q=.2, *//*; q=.2\
 Connection: keep-alive\r\n\
 Content-Length: %d\r\n\r\n",verb_str_arr[verb],path_str,protocol_str[es_info.type_],es_info.ip_addr,es_info.port_,body_len);
 	}
-	printf("%s\n\n",buff);
+	//printf("%s\n\n",buff);
+	body_len = frame_strlen(buff);
 send:
 	ret = tcp_client_send(es_info.es_fd_,buff);
 	if(ret == 0)
@@ -118,7 +120,7 @@ send:
 		}
 	}
 recv:
-	ret = tcp_client_recv(es_info.es_fd_,r_buf,SOCKET_BUFF_LEN);
+	ret = tcp_client_recv(es_info.es_fd_,r_buf,SOCKET_BUF_RECV);
 	if(ret <= 0)
 	{
 		ret = es_server_connect();
@@ -128,12 +130,12 @@ recv:
 		}else{
 			goto recv;
 		}
-	}else if(ret > SOCKET_BUFF_LEN)
+	}else if(ret > SOCKET_BUF_RECV)
 	{
 		goto recv;
 	}
 	printf("%s",r_buf);
-	if(ret == SOCKET_BUFF_LEN)
+	if(ret == SOCKET_BUF_RECV)
 		goto recv;
 }
 

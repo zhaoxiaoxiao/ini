@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
 	(void)signal(SIGTERM, sig_catch);//kill
 
 	es_server_init("127.0.0.1",50001,HTTP);
-	es_server_query(GET_METHOD,"/elefence_terminal_info/_search","pretty","{\"query\":{\"term\":{\"terminal_mac\":\"E8-3A-12-B0-6C-DB\"}}}");
+	es_server_query(GET_METHOD,"/elefence_terminal_info/_search","pretty",NULL);
 	es_server_destroy();
 	return 0;
 }
