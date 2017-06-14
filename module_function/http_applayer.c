@@ -2,6 +2,7 @@
 #include "common.h"
 #include "http_applayer.h"
 
+#if 0
 int make_http_post_json(char *h_buf,int len,char *path,char *body_str)
 {
 	int h_buf_len = 0;
@@ -51,5 +52,40 @@ Accept-Language: zh-CN,zh;q=0.8",path,es_info.ip_addr,es_info.port_);
 
 	h_buf_len = frame_strlen(h_buf);
 	return h_buf_len;
+}
+#endif
+
+int make_es_http_message(MAKE_HTTP_MESSAGE *param)
+{
+	int ret = 0;
+
+	if(param->h_head == NULL || param->h_buf == NULL || param->path == NULL || param->ip_str == NULL)
+		return -1;
+
+	if(param->h_buf_len <= 0 || param->port == 0)
+		return -1;
+
+	if(param->body)
+	{
+		ret = frame_strlen(param->body);
+		snprintf(param->h_buf,param->h_buf_len,"%s %s HTTP/1.1\r\n\
+User-Agent: ES-HTTP-API\r\n\
+Content-type: application/json;charset=UTF-8\r\n\
+Host: %s:%d\r\n\
+Accept: application/json, image/gif, image/jpeg, *; q=.2, *//*; q=.2\r\n\
+Connection: keep-alive\r\n\
+Content-Length: %d\r\n\r\n\
+%s",param->h_head,param->path,param->ip_str,param->port,ret,param->body);
+	}else{
+		snprintf(param->h_buf,param->h_buf_len,"%s %s HTTP/1.1\r\n\
+User-Agent: ES-HTTP-API\r\n\
+Content-type: application/json;charset=UTF-8\r\n\
+Host: %s:%d\r\n\
+Accept: application/json, image/gif, image/jpeg, *; q=.2, *//*; q=.2\r\n\
+Connection: keep-alive",param->h_head,param->path,param->ip_str,param->port);
+	}
+
+	ret = frame_strlen(param->h_buf);
+	return ret;
 }
 

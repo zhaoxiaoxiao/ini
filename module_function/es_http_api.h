@@ -28,23 +28,25 @@ typedef struct es_request{
 }ES_REQUEST;
 
 typedef struct es_respond{
-	int sta_;
+	int sta_;//0 is init,1 is send,2 is recv,3is call back
 	int res_sta_;
 	int num_;
 	OBJ_INFO *head;
 	OBJ_INFO *tail;
 	ngx_pool_t *mem;
 
-	ES_REQUEST *req;
+	ES_REQUEST *req_;
 	char *req_buf;
 	RESPOND_CALLBACL call_;
 }ES_RESPOND;
 
 int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type);
 
+int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call);
+
 ES_RESPOND* es_query_block(ES_REQUEST *req);
 
-void es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call);
+void release_es_respond();
 
 void es_server_destroy();
 
