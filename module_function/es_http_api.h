@@ -5,6 +5,8 @@
 extern "C" {
 #endif
 
+typedef struct es_respond ES_RESPOND;
+
 typedef void (*RESPOND_CALLBACL)(ES_RESPOND *ret);
 
 typedef enum protocol_type{
@@ -27,7 +29,7 @@ typedef struct es_request{
 	VERB_METHOD verb;
 }ES_REQUEST;
 
-typedef struct es_respond{
+struct es_respond{
 	int sta_;//0 is init,1 is send,2 is recv,3is call back
 	int res_sta_;
 	int num_;
@@ -38,7 +40,7 @@ typedef struct es_respond{
 	ES_REQUEST *req_;
 	char *req_buf;
 	RESPOND_CALLBACL call_;
-}ES_RESPOND;
+};
 
 int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type);
 

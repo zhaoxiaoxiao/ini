@@ -1,13 +1,17 @@
 
 #include <pthread.h>
 #include <semaphore.h>
+#include <sys/socket.h>
 
 #include "common.h"
+#include "memory_pool.h"
+#include "key_value_part.h"
+#include "es_obj_info.h"
 #include "es_http_api.h"
 #include "socket_api.h"
 #include "frame_tool.h"
-#include "memory_pool.h"
 #include "http_applayer.h"
+
 
 #define ES_MEM_POLL_SIZE			(1536)
 
@@ -419,16 +423,16 @@ ES_RESPOND* es_query_block(ES_REQUEST *req)
 	ES_RESPOND *p_res = NULL;
 
 	if(req->path_str == NULL)
-		return -3;
+		return NULL;
 	if(es_info.is_run == 0)
-		return -2;
+		return NULL;
 	pthread_mutex_lock(&es_info.bloc_mutex);
 	p_res = es_res_array + ES_RESPOND_ARRAY_LEN;
-
+	
 	if(req->path_str && req->query_str)
-		sprintf(path_str"%s?%s",req->path_str,req->query_str);
+		sprintf(path_str,"%s?%s",req->path_str,req->query_str);
 	else
-		sprintf(path_str"%s",req->path_str);
+		sprintf(path_str,"%s",req->path_str);
 	par.h_head = verb_str_arr[req->verb];
 	par.path = path_str;
 	if(req->body_str)
@@ -441,7 +445,7 @@ ES_RESPOND* es_query_block(ES_REQUEST *req)
 	do{
 		i++;
 		str_len = SOCKET_BUFF_LEN * i;
-		p_res->req_buf = (char*)ngx_pnalloc(str_len);
+		p_res->req_buf = (char*)ngx_pnalloc(p_res->mem,str_len);
 		if(p_res->req_buf == NULL)
 		{
 			goto error_out;
@@ -483,7 +487,7 @@ recv:
 	{
 		goto recv;
 	}
-	printf("%s",r_buf);
+	printf("%s",recv_buf);
 	if(ret == SOCKET_BUF_RECV)
 		goto recv;
 	
@@ -498,7 +502,7 @@ int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
 	ES_RESPOND *p_res = NULL;
 	int str_len = 0,index = 0,i = 0,ret = 0;
 	MAKE_HTTP_MESSAGE par = {0};
-	char path_str[SOCKET_BUFF_LEN] = {0};
+	char path_str[SOCKET_BUFF_LEN] = {0},*p_char = NULL;
 
 	if(req->path_str == NULL)
 		return -3;
@@ -514,7 +518,7 @@ int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
 	}
 
 	p_res->call_ = call;
-	p_res->req_ = (ES_REQUEST*)ngx_pnalloc(sizeof(ES_REQUEST));
+	p_res->req_ = (ES_REQUEST*)ngx_pnalloc(p_res->mem,sizeof(ES_REQUEST));
 	if(p_res->req_ == NULL)
 	{
 		ret = -1;
@@ -523,35 +527,39 @@ int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
 	p_res->req_->verb = req->verb;
 
 	str_len = frame_strlen(req->path_str) + 1;
-	p_res->req_->path_str = (char*)ngx_pnalloc(sizeof(str_len));
-	if(p_res->req_->path_str == NULL)
+	p_char = (char*)ngx_pnalloc(p_res->mem,sizeof(str_len));
+	if(p_char == NULL)
 	{
 		ret = -1;
 		goto error_out;
 	}
-	memcpy(p_res->req_->path_str,req->path_str,str_len);
+	memcpy(p_char,req->path_str,str_len);
+	p_res->req_->path_str = p_char;
 
 	str_len = frame_strlen(req->query_str) + 1;
-	p_res->req_->query_str = (char*)ngx_pnalloc(sizeof(str_len));
-	if(p_res->req_->query_str == NULL)
+	p_char = (char*)ngx_pnalloc(p_res->mem,sizeof(str_len));
+	if(p_char == NULL)
 	{
 		ret = -1;
 		goto error_out;
 	}
-	memcpy(p_res->req_->query_str,req->query_str,str_len);
+	memcpy(p_char,req->query_str,str_len);
+	p_res->req_->query_str = p_char;
 
 	str_len = frame_strlen(req->body_str) + 1;
-	p_res->req_->body_str = (char*)ngx_pnalloc(sizeof(str_len));
-	if(p_res->req_->body_str == NULL)
+	p_char = (char*)ngx_pnalloc(p_res->mem,sizeof(str_len));
+	if(p_char == NULL)
 	{
 		ret = -1;
 		goto error_out;
 	}
-	memcpy(p_res->req_->body_str,req->body_str,str_len);
+	memcpy(p_char,req->body_str,str_len);
+	p_res->req_->body_str = p_char;
+	
 	if(req->path_str && req->query_str)
-		sprintf(path_str"%s?%s",req->path_str,req->query_str);
+		sprintf(path_str,"%s?%s",req->path_str,req->query_str);
 	else
-		sprintf(path_str"%s",req->path_str);
+		sprintf(path_str,"%s",req->path_str);
 	par.h_head = verb_str_arr[req->verb];
 	par.path = path_str;
 	if(req->body_str)
@@ -564,7 +572,7 @@ int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
 	do{
 		i++;
 		str_len = SOCKET_BUFF_LEN * i;
-		p_res->req_buf = (char*)ngx_pnalloc(str_len);
+		p_res->req_buf = (char*)ngx_pnalloc(p_res->mem,str_len);
 		if(p_res->req_buf == NULL)
 		{
 			ret = -1;

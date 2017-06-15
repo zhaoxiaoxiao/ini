@@ -34,7 +34,11 @@ void gettimespace()
 void gettimeval()
 {
 	struct timeval tval = {0};
-
+	struct tm *p_tm_truct = NULL,tm_time = {0};
+	
 	gettimeofday(&tval,NULL);
+	p_tm_truct = localtime(&tval.tv_sec);
+
+	localtime_r(&tval.tv_sec, &tm_time);  
 }
 

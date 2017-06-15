@@ -33,6 +33,7 @@ LOCAL_SRC_CFILES := \
 		es_http_api.c		\
 		key_value_part.c	\
 		memory_pool.c		\
+		http_applayer.c		\
 
 LOCAL_SRC_CCFILES := \
 

@@ -1,6 +1,7 @@
 
 #include "common.h"
 #include "http_applayer.h"
+#include "frame_tool.h"
 
 #if 0
 int make_http_post_json(char *h_buf,int len,char *path,char *body_str)

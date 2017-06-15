@@ -6,12 +6,12 @@ extern "C" {
 #endif
 
 typedef struct make_http_message{
-	char *h_head;
+	const char *h_head;
 	char *h_buf;
 
-	char *path;
-	char *body;
-	char *ip_str;
+	const char *path;
+	const char *body;
+	const char *ip_str;
 	
 	int h_buf_len;
 	unsigned short port;
