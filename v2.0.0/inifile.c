@@ -27,7 +27,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#include "inifile_t.h"
+#include "inifile.h"
 
 #define CONTENT_NEELINE_SIGN			10
 #define CONTENT_SPACE_SIGN				32
@@ -1305,7 +1305,7 @@ int add_value_ofkey(int ini_fd,INI_PARAMETER *parameter)
 			ret = rewrite_after_add(p_ini_file->name,parameter);
 			if(ret < 0)
 				goto error_out;
-			ret = rewrite_after_add(p_ini_file->name,parameter);
+			//ret = rewrite_after_add(p_ini_file->name,parameter);
 		}else
 			ret = INIFILE_KEYVALUE_ALREAD;
 	}else
@@ -1580,7 +1580,7 @@ int main(int argc, char *argv[])
 	char up_value[] = "goodman",add_value[] = "yunying";
 	INI_PARAMETER ini_parameter = {0};
 	
-	fd = init_ini_file("test.ini",0);
+	fd = init_ini_file("conf/wc_db.conf",0);
 	if(fd < 0)
 		return fd;
 	ini_file_info_out(fd);
@@ -1595,10 +1595,9 @@ int main(int argc, char *argv[])
 	ini_file_info_out(fd);
 #endif
 	ini_parameter.section = add_sec;
-	ini_parameter.key = NULL;
-	ini_parameter.value = NULL;
-	ret = add_ini_section(fd,&ini_parameter);
-	PDEBUG("ret :: %d\n",ret);
+	ini_parameter.key = add_key;
+	ini_parameter.value = add_value;
+	ret = add_value_ofkey(fd,&ini_parameter);
 	ini_file_info_out(fd);
 	
 	destroy_ini_source(fd);
