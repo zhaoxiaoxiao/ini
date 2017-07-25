@@ -292,7 +292,7 @@ int storage_char_memory(const char **dest,const char *src,int len)
 		pool_mem.curr_len += len + INIFILE_SPACE_CHAR_LEN;
 		if(pool_mem.curr_len >= INIFILE_SIZE_SPACE)
 		{
-			ret= INIFILE_MEMORY_POOL_OUT;
+			ret = INIFILE_MEMORY_POOL_OUT;
 			goto error_out;
 		}
 	}
@@ -700,6 +700,14 @@ int read_analys_ini_file(int ini_fd,const char *file_name)
 {
 	int ret = 0;
 	char line[INIFILE_MAX_CONTENT_LINELEN] = {0};
+
+	ret = access(file_name, R_OK|W_OK);
+	if(ret != 0)
+	{
+		PERROR("File no exise of can't open\n");
+		return INIFILE_NO_EXIST;
+	}
+	
 	FILE *fp = fopen(file_name,"r");
 
 	if(fp == NULL)
@@ -862,8 +870,7 @@ int rewrite_after_update(const char *filename,INI_PARAMETER *parameter)
 								snprintf(p_char,len,"%s",parameter->value);
 								p_comma = str_frist_constchar(p_value,CONTENT_COMMA_SIGN);
 								if(p_comma)
-								
-{
+								{
 									p_char = find_frist_endchar(mod_line);
 									sprintf(p_char,"\t%s",p_comma);
 								}
@@ -980,8 +987,7 @@ int rewrite_after_add(const char *filename,INI_PARAMETER *parameter)
 							p_char = find_frist_endchar(p_char);
 							*p_char = CONTENT_NEELINE_SIGN;
 							flag = 1;
-						
-}
+						}
 					}
 					break;
 				case LINE_KEYVALUE:
@@ -1081,8 +1087,7 @@ int rewrite_after_delete(const char *filename,INI_PARAMETER *parameter)
 								flag = 1;
 							}
 							continue;
-						
-}
+						}
 					}
 					break;
 				case LINE_KEYVALUE:
