@@ -20,11 +20,13 @@ int frame_strlen(const char *str);
 
 int framestr_isall_digital(const char *str);
 
-char* framestr_frist_constchar(char *str,const char c);
+char* framestr_frist_constchar(char *str,char c);
 
-char* framestr_last_constchar(char *str,const char c);
+char* framestr_end_digital_char(char *dig_str);
 
-char* framestr_first_conststr(char *str,const char *tar);
+char* framestr_last_constchar(char *str,char c);
+
+char* framestr_first_conststr(char *str,char *tar);
 
 char *current_user_name(char *name,int len);
 

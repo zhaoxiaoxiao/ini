@@ -31,8 +31,10 @@ typedef struct es_request{
 
 struct es_respond{
 	int sta_;//0 is init,1 is send,2 is recv,3is call back
-	int res_sta_;
-	int num_;
+	int obj_num_;
+	
+	HTTP_HEAD_INFO *http;
+	char *err_message;
 	OBJ_INFO *head;
 	OBJ_INFO *tail;
 	ngx_pool_t *mem;

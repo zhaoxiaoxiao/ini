@@ -15,6 +15,10 @@ KEY_VALUE_NODE* create_key_value_head(char* key,char* value,ngx_pool_t* mem);
 
 KEY_VALUE_NODE* add_key_value_tail(KEY_VALUE_NODE* pre,char* key,char* value,ngx_pool_t* mem);
 
+void add_keyvalue_after_head(KEY_VALUE_NODE* head,KEY_VALUE_NODE *node);
+
+char* find_value_after_head(KEY_VALUE_NODE* head,char * key);
+
 #ifdef __cplusplus
 }
 #endif

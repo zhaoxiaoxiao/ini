@@ -6,6 +6,8 @@ extern "C" {
 #endif
 
 typedef struct obj_info{
+	char *index;
+	char *type;
 	char *id_;
 	KEY_VALUE_NODE *head_;
 	struct obj_info *next_;

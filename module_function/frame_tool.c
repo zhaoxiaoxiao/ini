@@ -110,7 +110,7 @@ int framestr_isall_digital(const char *str)
 	return flag;
 }
 
-char* framestr_frist_constchar(char *str,const char c)
+char* framestr_frist_constchar(char *str,char c)
 {
 	char *p = str;
 	if(!str)
@@ -125,7 +125,21 @@ char* framestr_frist_constchar(char *str,const char c)
 	return NULL;
 }
 
-char* framestr_last_constchar(char *str,const char c)
+char* framestr_end_digital_char(char *dig_str)
+{
+	char *p = dig_str;
+	if(!dig_str)
+		return NULL;
+	while(*p)
+	{
+		if(*p < 48 || *p > 57)
+			break;
+		p++;
+	}
+	return p;
+}
+
+char* framestr_last_constchar(char *str,char c)
 {
 	char *p = NULL;
 	if(!str)
@@ -141,7 +155,7 @@ char* framestr_last_constchar(char *str,const char c)
 	return NULL;
 }
 
-char* framestr_first_conststr(char *str,const char *tar)
+char* framestr_first_conststr(char *str,char *tar)
 {
 	const char *q = tar;
 	const char tar_fri = *tar;

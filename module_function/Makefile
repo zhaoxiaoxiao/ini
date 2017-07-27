@@ -34,6 +34,7 @@ LOCAL_SRC_CFILES := \
 		key_value_part.c	\
 		memory_pool.c		\
 		http_applayer.c		\
+		http_head_info.c	\
 
 LOCAL_SRC_CCFILES := \
 
