@@ -22,6 +22,8 @@ int framestr_isall_digital(const char *str);
 
 char* framestr_frist_constchar(char *str,char c);
 
+char* framestr_start_digital_char(char *dig_str);
+
 char* framestr_end_digital_char(char *dig_str);
 
 char* framestr_last_constchar(char *str,char c);

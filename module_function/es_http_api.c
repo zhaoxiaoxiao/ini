@@ -11,6 +11,7 @@
 #include "frame_tool.h"
 #include "http_applayer.h"
 #include "http_head_info.h"
+#include "es_search_result.h"
 #include "es_http_api.h"
 
 #define ES_MEM_POLL_SIZE			(1536)
@@ -137,26 +138,38 @@ int get_call_index()
 	return index;
 }
 
-int analysis_es_recv_str(char **buf,ES_RESPOND *res,int* bit_move)
-{
-	int buf_len = 0,str_len = 0,ret = 0;
-	char http_str[] = "HTTP",seq_str[] = "\r\n",cont_str[] = "Content-Length";
-	char tmp_char[32] = {0},*p_char = *buf,*q_char = *buf,*p_colon = NULL;
-	KEY_VALUE_NODE *node = NULL;
-	
-	buf_len = frame_strlen(*buf);
 
+///return = 0 mean one respond is over,and will be deal another respond
+///return > 0 
+///return < 0 mean there is something wrong about analysis str buf
+///bit_mover means must give up how many byte;
+int analysis_es_recv_str(char *buf,ES_RESPOND *res,int* bit_move)
+{
+	int buf_len = 0,str_len = 0,is_obj_end = 0,copy_len = 0,head_len = 0;
+	char http_str[] = "HTTP",seq_str[] = "\r\n",cont_str[] = "Content-Length",hit_str[] = "hits",total_str[] = "total",
+		_index_str[] = "_index",_type_str[] = "_type",_id_str[] = "_id";
+	char tmp_char[32] = {0},*p_char = buf,*q_char = buf,*p_colon = NULL,*p_left_brack = NULL,*p_right_brack = NULL,
+		*p_comma = NULL,*p_end_head = NULL,*p_end_obj = NULL,*p_left_quot = NULL,*p_right_quot = NULL;
+	KEY_VALUE_NODE *node = NULL;
+	OBJ_INFO *obj_node = NULL;
+
+	*bit_move = 0;
+	buf_len = frame_strlen(buf);
+	
 	p_char = framestr_first_conststr(p_char,http_str);
-	if(p_char)
+	if(p_char)//begin flag or new recv mess
 	{
 		if(p_char == q_char)
 		{
 			if(res->http == NULL)
 			{
+				//////////////////////////////////////////////////////////////////////////////////
+				///////http head is begin
 				res->http = (HTTP_HEAD_INFO *)ngx_pnalloc(res->mem,sizeof(HTTP_HEAD_INFO));
 				if(res->http == NULL)
 				{
 					PERROR("system malloc error\n");
+					*bit_move = 0;
 					return -2;
 				}
 				memset(res->http,0,sizeof(HTTP_HEAD_INFO));
@@ -181,7 +194,7 @@ int analysis_es_recv_str(char **buf,ES_RESPOND *res,int* bit_move)
 					}
 					
 				}else{
-					PERROR("");
+					PERROR("There is something wrong to find space division flag\n");
 				}
 				
 				p_char = framestr_first_conststr(q_char,seq_str);
@@ -193,6 +206,7 @@ int analysis_es_recv_str(char **buf,ES_RESPOND *res,int* bit_move)
 						if(node == NULL)
 						{
 							PERROR("system malloc error\n");
+							*bit_move = 0;
 							return -2;
 						}
 						memset(node,0,sizeof(KEY_VALUE_NODE));
@@ -202,6 +216,7 @@ int analysis_es_recv_str(char **buf,ES_RESPOND *res,int* bit_move)
 						if(node->key_  == NULL)
 						{
 							PERROR("system malloc error\n");
+							*bit_move = 0;
 							return -2;
 						}
 						memset(node->key_,0,str_len);
@@ -216,6 +231,7 @@ int analysis_es_recv_str(char **buf,ES_RESPOND *res,int* bit_move)
 						if(node->value_  == NULL)
 						{
 							PERROR("system malloc error\n");
+							*bit_move = 0;
 							return -2;
 						}
 						memset(node->value_,0,str_len);
@@ -229,20 +245,575 @@ int analysis_es_recv_str(char **buf,ES_RESPOND *res,int* bit_move)
 					q_char = p_char + 2;
 					p_char = framestr_first_conststr(q_char,seq_str);
 				}
-				
 				res->http->body_len = atoi(find_value_after_head(res->http->head_,cont_str));
+				p_end_head = q_char;
+				head_len = q_char - buf;
+				////////////////////////////////////////head is end
+				if(res->http->ret < 200 || res->http->ret >= 300)
+				{
+					str_len = res->http->body_len + 1;
+					res->err_message = (char *)ngx_pnalloc(res->mem,str_len);
+					if(res->err_message  == NULL)
+					{
+						PERROR("system malloc error\n");
+						*bit_move = head_len;
+						return -2;
+					}
+					str_len = q_char - buf;
+					copy_len = buf_len - str_len;
+					if(copy_len > res->http->body_len)
+					{
+						memcpy(res->err_message,q_char,res->http->body_len);
+						*bit_move = res->http->body_len + str_len;
+						return 0;
+					}else{
+						memcpy(res->err_message,q_char,copy_len);
+						*bit_move = buf_len;
+						return 1;
+					}
+				}
+
+				if(res->http->body_len < 90)
+				{
+					str_len = res->http->body_len + 1;
+					res->message = (char *)ngx_pnalloc(res->mem,str_len);
+					if(res->message  == NULL)
+					{
+						PERROR("system malloc error\n");
+						*bit_move = head_len;
+						return -2;
+					}
+					str_len = q_char - buf;
+					copy_len = buf_len - str_len;
+					if(copy_len > res->http->body_len)
+					{
+						memcpy(res->message,q_char,res->http->body_len);
+						*bit_move = res->http->body_len + str_len;
+						return 0;
+					}else{
+						memcpy(res->message,q_char,copy_len);
+						*bit_move = buf_len;
+						return 1;
+					}
+				}
+				
+				p_left_brack = framestr_frist_constchar(q_char,123);///{
+				if(p_left_brack)
+				{
+					/////////////////////////////////////////////////////////////////////////////////////////
+					str_len = p_left_brack - p_end_head;
+					if(str_len > res->http->body_len)
+					{
+						PERROR("This suitation will never happen anytime and flag sign out of bounds\n");
+						*bit_move = head_len;
+						return 0;
+					}
+					q_char = p_left_brack;
+					p_char = framestr_first_conststr(q_char,hit_str);
+					if(p_char)
+					{
+						q_char = p_char + frame_strlen(hit_str);
+						p_char = framestr_first_conststr(q_char,total_str);
+						if(p_char)
+						{
+							q_char = p_char + frame_strlen(total_str);
+							p_colon = framestr_frist_constchar(q_char,58);//:::
+							if(p_colon)
+							{
+								p_char = framestr_start_digital_char(p_colon);
+								if(p_char)
+								{
+									q_char = framestr_end_digital_char(p_char);
+									if(q_char)
+									{
+										str_len = q_char - p_end_head;
+										if(str_len > res->http->body_len)
+										{
+											PERROR("This suitation will never happen anytime and flag sign out of bounds\n");
+											*bit_move = head_len;
+											return 0;
+										}
+										res->search = (ES_SEARCH_RESULT *)ngx_pnalloc(res->mem,sizeof(ES_SEARCH_RESULT));
+										if(res->search == NULL)
+										{
+											PERROR("system malloc error\n");
+											*bit_move = head_len;
+											return -2;
+										}
+										memset(res->search,0,sizeof(ES_SEARCH_RESULT));
+										str_len = p_char - q_char;
+										memset(tmp_char,0,32);
+										memcpy(tmp_char,q_char,str_len);
+										res->search->total = atoi(tmp_char);
+									}else{
+										PERROR("There is no found \"total\" value\n");
+										*bit_move = head_len;
+										return 1;
+									}
+								}else{
+									PERROR("There is no found \"total\" value\n");
+									*bit_move = head_len;
+									return 1;
+								}
+							}else{
+								PERROR("There is no found \"total\" value\n");
+								*bit_move = head_len;
+								return 1;
+							}
+						}else{
+							PERROR("There is no found \"total\" string\n");
+							*bit_move = head_len;
+							return 1;
+						}
+					}else{
+						PERROR("There is no found \"hits\" string\n");
+						*bit_move = head_len;
+						return 1;
+					}
+					////init result total num
+					//////////////////////////////////////////////////////////////////////////////////////
+					p_char = framestr_first_conststr(q_char,hit_str);
+					if(p_char)
+					{
+						
+					}
+				}else{
+					str_len = res->http->body_len + 1;
+					res->message = (char *)ngx_pnalloc(res->mem,str_len);
+					if(res->message  == NULL)
+					{
+						PERROR("system malloc error\n");
+						*bit_move = head_len;
+						return -2;
+					}
+					str_len = q_char - buf;
+					copy_len = buf_len - str_len;
+					if(copy_len > res->http->body_len)
+					{
+						memcpy(res->message,q_char,res->http->body_len);
+						*bit_move = res->http->body_len + str_len;
+						return 0;
+					}else{
+						memcpy(res->message,q_char,copy_len);
+						*bit_move = buf_len;
+						return 1;
+					}
+				}
 			}else{
 				PERROR("There is http buf is begin message but the res is no null\n");
 				return -1;//paramter error
 			}
 		}else{
-			;
+			if(res->http == NULL)
+			{
+			}else{
+			}
+			//TODO
+			return 0;
 		}
-	}else{
-		if(res->http == NULL)
+	}else{/// no any begin flag,there data just data;
+		if(res->http == NULL)// respond head must be not null or will give up this all data
 		{
+			PERROR("There recv buf not contail any begin flag ,but the respond head is null and this suitation not happeen any time\n");
 			*bit_move = buf_len;
 			return 1;
+		}
+
+		if(res->message)///only message
+		{
+			p_char = frame_end_charstr(res->message);
+			memcpy(p_char,q_char,buf_len);
+			*bit_move = buf_len;
+			if(frame_strlen(res->message) == res->http->body_len)
+				return 0;
+			else
+				return 1;
+		}else if(res->err_message)//only error message
+		{
+			p_char = frame_end_charstr(res->err_message);
+			memcpy(p_char,q_char,buf_len);
+			*bit_move = buf_len;
+			if(frame_strlen(res->err_message) == res->http->body_len)
+				return 0;
+			else
+				return 1;
+		}else if(res->search)
+		{
+			p_left_brack = framestr_frist_constchar(q_char,123);//{{
+			while(p_left_brack)
+			{
+				p_char = p_left_brack;
+				p_right_brack = framestr_frist_constchar(p_left_brack,125);//}}
+				if(p_right_brack)
+				{
+					p_right_brack++;
+					p_end_obj = framestr_frist_constchar(p_right_brack,125);//}}
+					if(p_end_obj)
+					{
+						p_left_brack = framestr_frist_constchar(p_left_brack,123);//{{
+						if(p_left_brack && p_left_brack < p_right_brack)
+						{
+							obj_node = (OBJ_INFO *)ngx_pnalloc(res->mem,sizeof(OBJ_INFO));
+							if(obj_node == NULL)
+							{
+								PERROR("system malloc error\n");
+								return -2;
+							}
+							
+							p_char = framestr_first_conststr(p_char,_index_str);
+							if(p_char && p_char < p_left_brack)
+							{
+								p_comma = framestr_frist_constchar(p_char,44);///,
+								if(!p_comma || p_comma > p_left_brack)
+									p_comma = p_left_brack;
+								p_colon = framestr_frist_constchar(p_char,58);//:::
+								if(p_colon && p_colon < p_comma)
+								{
+									p_left_quot = framestr_frist_constchar(p_char,34);//"""
+									if(!p_left_quot || p_left_quot > p_comma)
+									{
+										p_left_quot = framestr_start_digital_char(p_colon);
+										if(p_left_quot && p_left_quot < p_comma)
+										{
+											p_right_quot = framestr_end_digital_char(p_left_quot);
+											if(p_right_quot && p_right_quot <= p_comma)
+											{
+												str_len = p_right_quot - p_left_quot;
+												if(str_len > 0)
+												{
+													str_len++;
+													obj_node->index = (char *)ngx_pnalloc(res->mem,str_len);
+													if(obj_node->index == NULL)
+													{
+														PERROR("system malloc error\n");
+														return -2;
+													}
+													memset(obj_node->index,0,str_len);
+													str_len--;
+													memcpy(obj_node->index,p_left_quot,str_len);
+												}
+											}
+										}
+									}else{
+										p_left_quot++;
+										p_right_quot = framestr_frist_constchar(p_char,34);//"""
+										if(p_right_quot && p_right_quot < p_comma)
+										{
+											str_len = p_right_quot - p_left_quot;
+											if(str_len > 0)
+											{
+												str_len++;
+												obj_node->index = (char *)ngx_pnalloc(res->mem,str_len);
+												if(obj_node->index == NULL)
+												{
+													PERROR("system malloc error\n");
+													return -2;
+												}
+												memset(obj_node->index,0,str_len);
+												str_len--;
+												memcpy(obj_node->index,p_left_quot,str_len);
+											}
+										}
+									}
+								}
+
+								p_char = p_comma;
+							}
+
+							p_char = framestr_first_conststr(p_char,_type_str);
+							if(p_char && p_char < p_left_brack)
+							{
+								p_comma = framestr_frist_constchar(p_char,44);///,
+								if(!p_comma || p_comma > p_left_brack)
+									p_comma = p_left_brack;
+								p_colon = framestr_frist_constchar(p_char,58);//:::
+								if(p_colon && p_colon < p_comma)
+								{
+									p_left_quot = framestr_frist_constchar(p_char,34);//"""
+									if(!p_left_quot || p_left_quot > p_comma)
+									{
+										p_left_quot = framestr_start_digital_char(p_colon);
+										if(p_left_quot && p_left_quot < p_comma)
+										{
+											p_right_quot = framestr_end_digital_char(p_left_quot);
+											if(p_right_quot && p_right_quot <= p_comma)
+											{
+												str_len = p_right_quot - p_left_quot;
+												if(str_len > 0)
+												{
+													str_len++;
+													obj_node->type = (char *)ngx_pnalloc(res->mem,str_len);
+													if(obj_node->type == NULL)
+													{
+														PERROR("system malloc error\n");
+														return -2;
+													}
+													memset(obj_node->type,0,str_len);
+													str_len--;
+													memcpy(obj_node->type,p_left_quot,str_len);
+												}
+											}
+										}
+									}else{
+										p_left_quot++;
+										p_right_quot = framestr_frist_constchar(p_char,34);//"""
+										if(p_right_quot && p_right_quot < p_comma)
+										{
+											str_len = p_right_quot - p_left_quot;
+											if(str_len > 0)
+											{
+												str_len++;
+												obj_node->type = (char *)ngx_pnalloc(res->mem,str_len);
+												if(obj_node->type == NULL)
+												{
+													PERROR("system malloc error\n");
+													return -2;
+												}
+												memset(obj_node->type,0,str_len);
+												str_len--;
+												memcpy(obj_node->type,p_left_quot,str_len);
+											}
+										}
+									}
+								}
+
+								p_char = p_comma;
+							}
+
+							p_char = framestr_first_conststr(p_char,_id_str);
+							if(p_char && p_char < p_left_brack)
+							{
+								p_comma = framestr_frist_constchar(p_char,44);///,
+								if(!p_comma || p_comma > p_left_brack)
+									p_comma = p_left_brack;
+								p_colon = framestr_frist_constchar(p_char,58);//:::
+								if(p_colon && p_colon < p_comma)
+								{
+									p_left_quot = framestr_frist_constchar(p_char,34);//"""
+									if(!p_left_quot || p_left_quot > p_comma)
+									{
+										p_left_quot = framestr_start_digital_char(p_colon);
+										if(p_left_quot && p_left_quot < p_comma)
+										{
+											p_right_quot = framestr_end_digital_char(p_left_quot);
+											if(p_right_quot && p_right_quot <= p_comma)
+											{
+												str_len = p_right_quot - p_left_quot;
+												if(str_len > 0)
+												{
+													str_len++;
+													obj_node->id_ = (char *)ngx_pnalloc(res->mem,str_len);
+													if(obj_node->id_ == NULL)
+													{
+														PERROR("system malloc error\n");
+														return -2;
+													}
+													memset(obj_node->id_,0,str_len);
+													str_len--;
+													memcpy(obj_node->id_,p_left_quot,str_len);
+												}
+											}
+										}
+									}else{
+										p_left_quot++;
+										p_right_quot = framestr_frist_constchar(p_char,34);//"""
+										if(p_right_quot && p_right_quot < p_comma)
+										{
+											str_len = p_right_quot - p_left_quot;
+											if(str_len > 0)
+											{
+												str_len++;
+												obj_node->id_ = (char *)ngx_pnalloc(res->mem,str_len);
+												if(obj_node->id_ == NULL)
+												{
+													PERROR("system malloc error\n");
+													return -2;
+												}
+												memset(obj_node->id_,0,str_len);
+												str_len--;
+												memcpy(obj_node->id_,p_left_quot,str_len);
+											}
+										}
+									}
+								}
+
+								p_char = p_comma;
+							}
+							if(res->search->head == NULL)
+							{
+								add_objinfo_after_head(res->search->head,obj_node);
+								res->search->tail = obj_node;
+							}else{
+								add_objinfo_after_tail(&(res->search->tail),obj_node);
+							}
+							
+							p_char = p_left_brack;
+							is_obj_end = 0;
+							while(1)
+							{
+								p_comma = framestr_frist_constchar(p_char,44);///,
+								if(!p_comma || p_comma > p_right_brack)
+								{
+									p_comma = p_right_brack;
+									is_obj_end = 1;
+								}
+
+								p_colon = framestr_frist_constchar(p_char,58);//:::
+								if(p_colon && p_colon < p_comma)
+								{
+									node = (KEY_VALUE_NODE *)ngx_pnalloc(res->mem,sizeof(KEY_VALUE_NODE));
+									if(node == NULL)
+									{
+										PERROR("system malloc error\n");
+										return -2;
+									}
+									memset(node,0,sizeof(KEY_VALUE_NODE));
+									
+									p_left_quot = framestr_frist_constchar(p_char,34);///,
+									if(p_left_quot && p_left_quot < p_colon)
+									{
+										p_left_quot++;
+										p_right_quot = framestr_frist_constchar(p_left_quot,34);///,
+										if(p_right_quot && p_right_quot < p_colon)
+										{
+											str_len = p_right_quot - p_left_quot;
+											if(str_len > 0)
+											{
+												str_len++;
+												node->key_ = (char *)ngx_pnalloc(res->mem,str_len);
+												if(node->key_ == NULL)
+												{
+													PERROR("system malloc error\n");
+													return -2;
+												}
+												memset(node->key_,0,str_len);
+												str_len--;
+												memcpy(node->key_,p_left_quot,str_len);
+											}
+										}
+									}
+
+									p_left_quot = framestr_frist_constchar(p_colon,34);///,
+									if(p_left_quot && p_left_quot < p_comma)
+									{
+										p_left_quot++;
+										p_right_quot = framestr_frist_constchar(p_left_quot,34);///,
+										if(p_right_quot && p_right_quot < p_comma)
+										{
+											str_len = p_right_quot - p_left_quot;
+											if(str_len > 0)
+											{
+												str_len++;
+												node->value_ = (char *)ngx_pnalloc(res->mem,str_len);
+												if(node->value_ == NULL)
+												{
+													PERROR("system malloc error\n");
+													return -2;
+												}
+												memset(node->value_,0,str_len);
+												str_len--;
+												memcpy(node->value_,p_left_quot,str_len);
+											}
+										}
+									}else{
+										p_left_quot = framestr_start_digital_char(p_colon);
+										if(p_left_quot && p_left_quot < p_comma)
+										{
+											p_right_quot = framestr_end_digital_char(p_left_quot);
+											if(p_right_quot && p_right_quot < p_comma)
+											{
+												str_len = p_right_quot - p_left_quot;
+												if(str_len > 0)
+												{
+													str_len++;
+													node->value_= (char *)ngx_pnalloc(res->mem,str_len);
+													if(node->value_ == NULL)
+													{
+														PERROR("system malloc error\n");
+														return -2;
+													}
+													memset(node->value_,0,str_len);
+													str_len--;
+													memcpy(node->value_,p_left_quot,str_len);
+												}
+											}
+										}
+									}
+								}
+								p_char = p_comma + 1;
+								add_keyvalue_after_head(obj_node->head_,node);
+								node = NULL;
+								if(is_obj_end == 1)
+									break;
+							}
+							
+							obj_node = NULL;
+						}else{
+							PDEBUG("error:: %s\n",p_left_brack);
+						}
+					}else{
+						PDEBUG("%s\n",p_left_brack);
+						break;
+					}
+				}else{
+					PDEBUG("%s\n",p_left_brack);
+					break;
+				}
+
+				q_char = p_end_obj + 1;
+				*bit_move = q_char - buf;
+				p_left_brack = framestr_frist_constchar(q_char,123);//{{
+			}
+
+			PDEBUG("There is balance str:: %s can't analysis,need wait enought str\n",q_char);
+			return 1;
+		}else{
+			if(res->http->ret < 200 || res->http->ret >= 300)
+			{
+				str_len = res->http->body_len + 1;
+				res->err_message = (char *)ngx_pnalloc(res->mem,str_len);
+				if(res->err_message  == NULL)
+				{
+					PERROR("system malloc error\n");
+					*bit_move = head_len;
+					return -2;
+				}
+				if(buf_len >= res->http->body_len)
+				{
+					memcpy(res->err_message,q_char,res->http->body_len);
+					*bit_move = res->http->body_len;
+					return 0;
+				}else{
+					memcpy(res->err_message,q_char,buf_len);
+					*bit_move = buf_len;
+					return 1;
+				}
+			}
+
+			if(res->http->body_len < 90)
+			{
+				str_len = res->http->body_len + 1;
+				res->message = (char *)ngx_pnalloc(res->mem,str_len);
+				if(res->message  == NULL)
+				{
+					PERROR("system malloc error\n");
+					*bit_move = head_len;
+					return -2;
+				}
+				if(buf_len >= res->http->body_len)
+				{
+					memcpy(res->message,q_char,res->http->body_len);
+					*bit_move = res->http->body_len;
+					return 0;
+				}else{
+					memcpy(res->message,q_char,buf_len);
+					*bit_move = buf_len;
+					return 1;
+				}
+			}
+
+			////TODO
+			
 		}
 	}
 	
@@ -259,9 +830,9 @@ void inside_release_es_respond(ES_RESPOND* res)
 	res->obj_num_  = 0;
 
 	res->http = NULL;
+	res->message = NULL;
 	res->err_message = NULL;
-	res->head = NULL;
-	res->tail = NULL;
+	res->search = NULL;
 	
 	res->req_ = NULL;
 	res->req_buf = NULL;
@@ -442,8 +1013,8 @@ void release_es_respond()
 
 	res->http = NULL;
 	res->err_message = NULL;
-	res->head = NULL;
-	res->tail = NULL;
+	res->message = NULL;
+	res->search = NULL;
 	
 	res->req_ = NULL;
 	res->req_buf = NULL;
@@ -638,8 +1209,8 @@ error_out:
 
 	p_res->http = NULL;
 	p_res->err_message = NULL;
-	p_res->head = NULL;
-	p_res->tail = NULL;
+	p_res->message = NULL;
+	p_res->search = NULL;
 	
 	p_res->req_ = NULL;
 	p_res->req_buf = NULL;

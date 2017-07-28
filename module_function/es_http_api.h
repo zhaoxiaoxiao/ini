@@ -34,9 +34,9 @@ struct es_respond{
 	int obj_num_;
 	
 	HTTP_HEAD_INFO *http;
+	char *message;
 	char *err_message;
-	OBJ_INFO *head;
-	OBJ_INFO *tail;
+	ES_SEARCH_RESULT *search;
 	ngx_pool_t *mem;
 
 	ES_REQUEST *req_;

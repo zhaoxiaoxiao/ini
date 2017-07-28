@@ -125,6 +125,20 @@ char* framestr_frist_constchar(char *str,char c)
 	return NULL;
 }
 
+char* framestr_start_digital_char(char *dig_str)
+{
+	char *p = dig_str;
+	if(!dig_str)
+		return NULL;
+	while(*p)
+	{
+		if(*p >= 48 && *p <= 57)
+			break;
+		p++;
+	}
+	return p;
+}
+
 char* framestr_end_digital_char(char *dig_str)
 {
 	char *p = dig_str;

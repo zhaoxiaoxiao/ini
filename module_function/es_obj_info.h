@@ -17,6 +17,10 @@ OBJ_INFO* create_obj_info_head(char *id,ngx_pool_t* mem);
 
 void add_obj_info_tail(OBJ_INFO *pre,char *id,ngx_pool_t* mem);
 
+void add_objinfo_after_head(OBJ_INFO *head,OBJ_INFO *node);
+
+void add_objinfo_after_tail(OBJ_INFO **tail,OBJ_INFO *node);
+
 #ifdef __cplusplus
 }
 #endif

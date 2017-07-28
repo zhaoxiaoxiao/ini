@@ -35,6 +35,8 @@ LOCAL_SRC_CFILES := \
 		memory_pool.c		\
 		http_applayer.c		\
 		http_head_info.c	\
+		es_obj_info.c		\
+		es_search_result.c	\
 
 LOCAL_SRC_CCFILES := \
 
