@@ -1,6 +1,13 @@
 
 #ifndef __PROGRAM_FRAMEWORK_ESHTTPAPI_H__
 #define __PROGRAM_FRAMEWORK_ESHTTPAPI_H__
+
+#include "memory_pool.h"
+#include "key_value_part.h"
+#include "es_obj_info.h"
+#include "http_head_info.h"
+#include "es_search_result.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -44,6 +51,12 @@ struct es_respond{
 	RESPOND_CALLBACL call_;
 };
 
+void es_server_send(void *data);
+
+void es_server_recv(void *data);
+
+void es_asynchronous_callback(void* data);
+
 int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type);
 
 int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call);
@@ -53,6 +66,8 @@ ES_RESPOND* es_query_block(ES_REQUEST *req);
 void release_es_respond();
 
 void es_server_destroy();
+
+void es_asynchronous_test_functon(ES_RESPOND *ret);
 
 #ifdef __cplusplus
 }

@@ -83,6 +83,7 @@ void* thread_routine(void *arg)
 	int index = 0;
 	while(1)
 	{
+		PDEBUG("Thread routing start....\n");
 		frame_threadpool_sleep();
 		index = get_valid_job_index();
 		frame_threadpool_wakeup();

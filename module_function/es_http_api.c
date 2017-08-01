@@ -4,14 +4,9 @@
 #include <sys/socket.h>
 
 #include "common.h"
-#include "memory_pool.h"
-#include "key_value_part.h"
-#include "es_obj_info.h"
 #include "socket_api.h"
 #include "frame_tool.h"
 #include "http_applayer.h"
-#include "http_head_info.h"
-#include "es_search_result.h"
 #include "es_http_api.h"
 
 #define ES_MEM_POLL_SIZE			(1536)
@@ -1232,14 +1227,13 @@ int analysis_es_recv_str(char *buf,ES_RESPOND *res,int* bit_move)
 	int ret = 0;
 	char http_str[] = "HTTP",*p_char = buf,*q_char = buf;
 
-
 	*bit_move = 0;
-	
 	p_char = framestr_first_conststr(p_char,http_str);
 	if(p_char)//begin flag or new recv mess
 	{
 		if(res->http == NULL)
 		{
+			PDEBUG("analysis http head first\n");
 			ret = analysis_http_head_str(p_char,res,bit_move);
 			if(ret < 0)
 				return ret;
@@ -1247,9 +1241,11 @@ int analysis_es_recv_str(char *buf,ES_RESPOND *res,int* bit_move)
 			////////////////////////////////////////head is end
 			return analysis_http_json_str(q_char,res,bit_move);
 		}else{
+			PDEBUG("analysis http body first\n");
 			return analysis_http_json_str(q_char,res,bit_move);
 		}
-	}else{/// no any begin flag,there data just data;		
+	}else{/// no any begin flag,there data just data;
+		PDEBUG("analysis http body\n");
 		return analysis_http_json_str(q_char,res,bit_move);
 	}
 }
@@ -1285,7 +1281,7 @@ void es_server_send(void *data)
 {
 	int ret = 0,index = 0;
 	ES_RESPOND *p_res = NULL;
-
+	PDEBUG("es_server_send start......\n");
 	while(1)
 	{
 		index = get_send_index();
@@ -1321,10 +1317,10 @@ void es_server_recv(void *data)
 	int ret = 0,index = 0,bit_move = 0;
 	char an_buf[AN_SOCKET_BUFF_LEN] = {0},r_buf[SOCKET_BUFF_LEN] = {0},*p_recv = an_buf,*p_char = NULL;
 	ES_RESPOND *p_res = NULL;
-
+	PDEBUG("es_server_recv start......\n");
 	while(1)
 	{
-		if(ret = 0)
+		if(ret == 0)
 		{
 			if(p_res)
 			{
@@ -1332,6 +1328,7 @@ void es_server_recv(void *data)
 				sem_post(&es_info.call_num);
 			}
 			index = get_recv_index();
+			PDEBUG("index :: %d\n",index);
 			if(index < 0)
 				break;
 			p_res = es_res_array + index;
@@ -1343,6 +1340,7 @@ void es_server_recv(void *data)
 		
 		memset(r_buf,0,SOCKET_BUFF_LEN);
 		ret = tcp_client_recv(es_info.es_fd_,r_buf,SOCKET_BUF_RECV);
+		PDEBUG("tcp_client_recv :: ret :: %d\n",ret);
 		if(ret <= 0)
 		{
 			ret = es_server_connect(es_info.es_fd_);
@@ -1352,21 +1350,24 @@ void es_server_recv(void *data)
 			}else{
 				continue;
 			}
-		}else if(ret == SOCKET_BUF_RECV)
+		}else if(ret <= SOCKET_BUF_RECV)
 		{
 			p_char = frame_end_charstr(an_buf);
-			memcmp(p_char,r_buf,ret);
+			memcpy(p_char,r_buf,ret);
 			ret = analysis_es_recv_str(p_recv,p_res,&bit_move);
+			PDEBUG("analysis_es_recv_str :: ret :: %d\n",ret);
 			memory_char_move_bit(an_buf,bit_move,AN_SOCKET_BUFF_LEN);
 		}else if(ret > SOCKET_BUF_RECV)
 		{
 			continue;
-		}else{//may be bug,TODO
+		}else{//may be bug,TODO// never be here
 			p_char = frame_end_charstr(an_buf);
-			memcmp(p_char,r_buf,ret);
+			memcpy(p_char,r_buf,ret);
 			ret = analysis_es_recv_str(p_recv,p_res,&bit_move);
+			PDEBUG("analysis_es_recv_str :: ret :: %d\n",ret);
 			memory_char_move_bit(an_buf,bit_move,AN_SOCKET_BUFF_LEN);
 		}
+		
 		if(ret < 0)
 		{
 			PERROR("There is something wrong to analysis buf\n");
@@ -1376,7 +1377,7 @@ void es_server_recv(void *data)
 				break;
 			}
 		}
-		printf("%s",r_buf);
+		
 	}
 
 	shutdown(es_info.es_fd_,SHUT_RD);//SHUT_RD;SHUT_RDWR
@@ -1386,6 +1387,7 @@ void es_asynchronous_callback(void* data)
 {
 	int index = 0;
 	ES_RESPOND *p_res = NULL;
+	PDEBUG("es_asynchronous_callback start......\n");
 	while(1)
 	{
 		index = get_call_index();
@@ -1399,6 +1401,7 @@ void es_asynchronous_callback(void* data)
 		if(p_res->call_)
 		{
 			p_res->call_(p_res);
+			p_res->sta_ = 0;
 		}
 		inside_release_es_respond(p_res);
 		p_res = NULL;
@@ -1446,6 +1449,9 @@ int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type)
 	for(i = 0;i < ES_RESPOND_ARRAY_ALL_LEN;i++)
 	{
 		p_res->mem = ngx_create_pool(ES_MEM_POLL_SIZE);
+		if(p_res->mem == NULL)
+			return -1;
+		p_res++;
 	}
 }
 
@@ -1587,39 +1593,54 @@ int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
 		goto error_out;
 	}
 	p_res->req_->verb = req->verb;
-
-	str_len = frame_strlen(req->path_str) + 1;
-	p_char = (char*)ngx_pnalloc(p_res->mem,sizeof(str_len));
-	if(p_char == NULL)
+	
+	if(req->path_str)
 	{
-		ret = -1;
-		goto error_out;
+		str_len = frame_strlen(req->path_str) + 1;
+		p_char = (char*)ngx_pnalloc(p_res->mem,str_len);
+		if(p_char == NULL)
+		{
+			ret = -1;
+			goto error_out;
+		}
+		memset(p_char,0,str_len);
+		str_len--;
+		memcpy(p_char,req->path_str,str_len);
+		p_res->req_->path_str = p_char;
 	}
-	memcpy(p_char,req->path_str,str_len);
-	p_res->req_->path_str = p_char;
-
-	str_len = frame_strlen(req->query_str) + 1;
-	p_char = (char*)ngx_pnalloc(p_res->mem,sizeof(str_len));
-	if(p_char == NULL)
+	
+	if(req->query_str)
 	{
-		ret = -1;
-		goto error_out;
+		str_len = frame_strlen(req->query_str) + 1;
+		p_char = (char*)ngx_pnalloc(p_res->mem,str_len);
+		if(p_char == NULL)
+		{
+			ret = -1;
+			goto error_out;
+		}
+		memset(p_char,0,str_len);
+		str_len--;
+		memcpy(p_char,req->query_str,str_len);
+		p_res->req_->query_str = p_char;
 	}
-	memcpy(p_char,req->query_str,str_len);
-	p_res->req_->query_str = p_char;
 
-	str_len = frame_strlen(req->body_str) + 1;
-	p_char = (char*)ngx_pnalloc(p_res->mem,sizeof(str_len));
-	if(p_char == NULL)
+	if(req->body_str)
 	{
-		ret = -1;
-		goto error_out;
+		str_len = frame_strlen(req->body_str) + 1;
+		p_char = (char*)ngx_pnalloc(p_res->mem,str_len);
+		if(p_char == NULL)
+		{
+			ret = -1;
+			goto error_out;
+		}
+		memset(p_char,0,str_len);
+		str_len--;
+		memcpy(p_char,req->body_str,str_len);
+		p_res->req_->body_str = p_char;
 	}
-	memcpy(p_char,req->body_str,str_len);
-	p_res->req_->body_str = p_char;
 	
 	if(req->path_str && req->query_str)
-		sprintf(path_str,"%s?%s",req->path_str,req->query_str);
+		sprintf(path_str,"%s%s",req->path_str,req->query_str);
 	else
 		sprintf(path_str,"%s",req->path_str);
 	par.h_head = verb_str_arr[req->verb];
@@ -1648,7 +1669,7 @@ int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
 			break;
 		}
 	}while(1);
-	
+
 	p_res->sta_ = 1;
 	sem_post(&es_info.send_num);
 	pthread_mutex_unlock(&es_info.asyn_mutex);
@@ -1694,6 +1715,78 @@ void es_server_destroy()
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void es_asynchronous_test_functon(ES_RESPOND *ret)
+{
+	KEY_VALUE_NODE *p = NULL;
+	OBJ_INFO *q = NULL;
+	
+	if(ret == NULL)
+	{
+		PERROR("The result is nuLL point\n");
+		return;
+	}
+
+	PDEBUG("ret->sta_ :: %d \n",ret->sta_);
+	PDEBUG("ret->obj_num_ :: %d \n",ret->obj_num_);
+
+	if(ret->http == NULL)
+	{
+		PERROR("The ES query http head is null\n");
+		return;
+	}else{
+		PDEBUG("ret->http->ver :: %s \n",ret->http->ver);
+		PDEBUG("ret->http->note :: %s \n",ret->http->note);
+		PDEBUG("ret->http->ret :: %d \n",ret->http->ret);
+		PDEBUG("ret->http->body_len :: %d \n",ret->http->body_len);
+
+		if(ret->http->head_ == NULL)
+		{
+			PERROR("The ES query http head key value is null \n");
+		}else{
+			for(p = ret->http->head_;p != NULL;p = p->next_)
+			{
+				PDEBUG("ret->http->head_:: %s : %s\n",p->key_,p->value_);
+			}
+		}
+	}
+
+	if(ret->message)
+	{
+		PDEBUG("ret->message :: %s\n",ret->message);
+	}
+
+	
+	if(ret->err_message)
+	{
+		PDEBUG("ret->err_message :: %s\n",ret->err_message);
+	}
+
+	if(ret->search)
+	{
+		PDEBUG("ret->search->total :: %d\n",ret->search->total);
+		if(ret->search->head == NULL)
+		{
+			PERROR("ret->search->head object is null\n");
+		}else{
+			for(q = ret->search->head;q != NULL;q = q->next_)
+			{
+				PDEBUG("ret->search->head->index :: %s \n",q->index);
+				PDEBUG("ret->search->head->type :: %s \n",q->type);
+				PDEBUG("ret->search->head->id_ :: %s \n",q->id_);
+				if(q->head_ == NULL)
+				{
+					PERROR("The object search is null\n");
+				}else{
+					for(p = q->head_ ; p != NULL;p =p->next_)
+					{
+						PDEBUG("ret->search->head key value:: %s : %s\n",p->key_,p->value_);
+					}
+				}
+			}
+		}
+	}
+}
+
 void es_server_query(VERB_METHOD verb,const char *path_str,const char *query_str,const char *body_str)
 {
 	int body_len = 0,ret = 0;

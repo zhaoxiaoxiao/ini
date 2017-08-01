@@ -253,3 +253,37 @@ size_t get_system_pagesize()
 	PDEBUG("page size = %d Byte\n",page);
 	return page;
 }
+
+int frame_call_shell_cmd(const char *cmd)
+{
+	pid_t status;
+	status = system(cmd);
+	
+	if (-1 == status)  
+    {  
+        PERROR("system error!\n");  
+    }  
+    else  
+    {  
+        PDEBUG("exit status value = [0x%x]\n", status);  
+  
+        if (WIFEXITED(status))  
+        {  
+            if (0 == WEXITSTATUS(status))  
+            {  
+                PDEBUG("run shell script successfully.\n");  
+            }  
+            else  
+            {  
+                PERROR("run shell script fail, script exit code: %d\n", WEXITSTATUS(status));  
+            }  
+        }  
+        else  
+        {  
+            PERROR("exit status = [%d]\n", WEXITSTATUS(status));  
+        }  
+    }  
+  
+    return 0; 
+}
+

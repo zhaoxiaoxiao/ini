@@ -4,8 +4,16 @@
 
 #include "common.h"
 #include "frame_thread_pool.h"
+#include "es_http_api.h"
 
 static struct itimerval itv = {0};
+
+
+void doing_defore_exiting()
+{
+	es_server_destroy();
+	frame_threadpool_destroy();
+}
 
 void clock_init()
 {
@@ -56,7 +64,7 @@ void sig_catch(int sig)
 			PERROR("%d\n",sig);
 			break;
 	}
-	
+	doing_defore_exiting();
 	PERROR("!!!!!!!!well, we catch signal in this process :::%d\n\n",sig);
 	exit(0);
 	return;
@@ -65,12 +73,62 @@ void sig_catch(int sig)
 int main(int argc, char *argv[])
 {
 	int ret = 0;
+	THREAD_POOL_JOB job = {0};
+	ES_REQUEST req = {0};
+	
 	(void)signal(SIGALRM,sig_catch);//timer
 	(void)signal(SIGINT, sig_catch);//ctrl + c 
 	(void)signal(SIGSEGV, sig_catch);//memory
 	(void)signal(SIGTERM, sig_catch);//kill
 
 	ret = frame_threadpool_init(4);
+	if(ret < 0)
+	{
+		PERROR("Thread pool init error\n");
+		return ret;
+	}
+	ret = es_server_init("127.0.0.1",50001,HTTP);
+	if(ret < 0)
+	{
+		PERROR("es info init error\n");
+		return ret;
+	}
+	job.call = es_server_send;
+	job.arg = NULL;
+	frame_add_job_queue(&job);
+
+	job.call = es_server_recv;
+	job.arg = NULL;
+	frame_add_job_queue(&job);
+
+	job.call = es_asynchronous_callback;
+	job.arg = NULL;
+	frame_add_job_queue(&job);
+
+	req.path_str = "/";
+	req.query_str = "/_search?pretty";
+	req.body_str = NULL;
+	req.verb = GET_METHOD;
+	ret = es_query_asynchronous(&req,es_asynchronous_test_functon);
+	if(ret < 0)
+	{
+		PERROR("es_query_asynchronous error\n");
+	}
+
+	req.path_str = "/elefence_terminal_info_00";
+	req.query_str = "/_search?pretty";
+	req.body_str = "{\"query\":{\"match\": { \"terminal_mac\": \"42-57-4A-EA-4D-28\" }}}";
+	req.verb = GET_METHOD;
+	ret = es_query_asynchronous(&req,es_asynchronous_test_functon);
+	if(ret < 0)
+	{
+		PERROR("es_query_asynchronous error\n");
+	}
+	while(1)
+	{
+		sleep(60);
+	}
+	doing_defore_exiting();
 	return 0;
 }
 
