@@ -7,6 +7,7 @@ extern "C" {
 
 typedef struct http_head_info{
 	char *ver;
+	char *note;
 	int ret;
 	int body_len;
 	KEY_VALUE_NODE *head_;
