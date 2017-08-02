@@ -6,13 +6,13 @@
 
 
 
-void add_objinfo_after_head(OBJ_INFO *head,OBJ_INFO *node)
+void add_objinfo_after_head(OBJ_INFO **head,OBJ_INFO *node)
 {
 	OBJ_INFO *tail = NULL;
-	if(head == NULL)
-		head = node;
+	if(*head == NULL)
+		*head = node;
 	else{
-		tail = head;
+		tail = *head;
 		while(tail->next_)
 			tail = tail->next_;
 		tail->next_ = node;

@@ -13,7 +13,7 @@ void* ngx_alloc(size_t size)
 	p = malloc(size);
 	if(p == NULL)
 	{
-		PERROR();
+		PERROR("important error :: malloc\n ");
 	}
 	return p;
 }
@@ -24,13 +24,18 @@ void* ngx_calloc(size_t size)
 	p = malloc(size);
 	if(p == NULL)
 	{
-		PERROR();
+		PERROR("important error :: malloc\n ");
 	}else{
 		memset(p,0,size);
 	}
 	return p;
 }
+#if 1
 
+#define mem_memalign_posix(alignment, size)		ngx_alloc(size)
+#define mem_memalign(alignment, size)			ngx_alloc(size)
+
+#else
 void* mem_memalign_posix(size_t alignment, size_t size)
 {
 	void  *p;
@@ -44,20 +49,19 @@ void* mem_memalign_posix(size_t alignment, size_t size)
 	return p;
 }
 
-#if 0
 void* mem_memalign(size_t alignment, size_t size)
 {
 	void  *p;
-    int    err;
 
-	err = memalign(&p, alignment, size);
-	if (err) {
-		p = NULL;
+	p = memalign(alignment, size);
+	if (p = NULL) {
+		PERROR("important error :: memalign\n ");
 	}
 
 	return p;
 }
 #endif
+
 //////////////////////////////////////////////////////////////////////////////////////
 
 ngx_pool_t* ngx_create_pool(size_t size)
@@ -184,7 +188,7 @@ static void* ngx_palloc_block(ngx_pool_t *pool, size_t size)
 
     psize = (size_t) (pool->d.end - (u_char *) pool);
 
-    m = (u_char*)mem_memalign_posix(NGX_POOL_ALIGNMENT, psize);
+    m = (u_char*)mem_memalign(NGX_POOL_ALIGNMENT, psize);
     if (m == NULL) {
         return NULL;
     }

@@ -6,12 +6,13 @@
 #include "key_value_part.h"
 
 
-void add_keyvalue_after_head(KEY_VALUE_NODE* head,KEY_VALUE_NODE *node)
+void add_keyvalue_after_head(KEY_VALUE_NODE** head,KEY_VALUE_NODE *node)
 {
-	KEY_VALUE_NODE *tail = head;
-	if(head == NULL)
-		head = node;
+	KEY_VALUE_NODE *tail = NULL;
+	if(*head == NULL)
+		*head = node;
 	else{
+		tail = *head;
 		while(tail->next_)
 		{
 			tail = tail->next_;

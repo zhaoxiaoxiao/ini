@@ -147,6 +147,7 @@ void memory_char_move_bit(char *begin,int bit,int be_size)
 	buf_len = frame_strlen(begin);
 	if(bit >= buf_len)
 	{
+		PDEBUG("str buf clean all\n");
 		memset(begin,0,bit);
 		return;
 	}
@@ -167,6 +168,7 @@ void memory_char_move_bit(char *begin,int bit,int be_size)
 
 	buf_len = be_size - buf_len;
 	memset(p_char,0,buf_len);
+	PDEBUG("begin:: %s\n",begin);
 }
 
 int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
@@ -230,6 +232,7 @@ int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
 				str_len = p_char - q_char;
 				if(str_len > 0)
 				{
+					str_len++;
 					res->http->note = (char *)ngx_pnalloc(res->mem,str_len);
 					if(res->http->note == NULL)
 					{
@@ -251,7 +254,7 @@ int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
 			p_char = framestr_first_conststr(q_char,seq_str);
 			while(p_char){
 				p_colon = framestr_frist_constchar(q_char,58);//:::
-				if(p_colon)
+				if(p_colon && p_colon < p_char)
 				{
 					node = (KEY_VALUE_NODE *)ngx_pnalloc(res->mem,sizeof(KEY_VALUE_NODE));
 					if(node == NULL)
@@ -293,15 +296,16 @@ int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
 						memcpy(node->value_,p_colon,str_len);
 					}
 
-					add_keyvalue_after_head(res->http->head_,node);
+					add_keyvalue_after_head(&(res->http->head_),node);
 					node = NULL;
-				} 
+				}
 
 				q_char = p_char + 2;
 				p_char = framestr_first_conststr(q_char,seq_str);
 			}
 			
 			p_char = find_value_after_head(res->http->head_,cont_str);
+			//PDEBUG("value:: %s\n",p_char);
 			if(p_char)
 				res->http->body_len = atoi(p_char);
 			else{
@@ -310,7 +314,7 @@ int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
 				ret = -2;
 				goto error_out;
 			}
-			*bit_move += q_char - str; 
+			*bit_move += q_char - str;
 			return 0;
 		}else{
 			PERROR("There is something wrong to find space division flag\n");
@@ -597,7 +601,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 							}
 							if(res->search->head == NULL)
 							{
-								add_objinfo_after_head(res->search->head,obj_node);
+								add_objinfo_after_head(&(res->search->head),obj_node);
 								res->search->tail = obj_node;
 							}else{
 								add_objinfo_after_tail(&(res->search->tail),obj_node);
@@ -697,7 +701,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 									}
 								}
 								p_char = p_comma + 1;
-								add_keyvalue_after_head(obj_node->head_,node);
+								add_keyvalue_after_head(&(obj_node->head_),node);
 								node = NULL;
 								if(is_obj_end == 1)
 									break;
@@ -724,14 +728,16 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 			p_right_square = framestr_frist_constchar(q_char,93);//]]]
 			if(p_right_square)
 			{
-				*bit_move = in_move + p_right_square - str + 1;
-				return 0;
+				ret = 0;
+				goto error_out;
 			}
-			else
+			else{
+				*bit_move = in_move + p_right_square - str + 1;
 				return 1;
+			}
 		}
 	}else{
-		
+		//PDEBUG("res->http->ret :: %d\n",res->http->ret);
 		if(res->http->ret < 200 || res->http->ret >= 300)
 		{
 			str_len = res->http->body_len + 1;
@@ -753,7 +759,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 				return 1;
 			}
 		}
-
+		//PDEBUG("res->http->body_len  :: %d\n",res->http->body_len );
 		if(res->http->body_len < 90)
 		{
 			str_len = res->http->body_len + 1;
@@ -808,8 +814,9 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 								if(str_len > 0)
 								{
 									memset(tmp_char,0,32);
-									memcpy(tmp_char,q_char,str_len);
+									memcpy(tmp_char,p_char,str_len);
 									res->search->total = atoi(tmp_char);
+									//PDEBUG("res->search->total  :: %d\n",res->search->total );
 								}else{
 									PERROR("There is no found of total str value\n");
 								}
@@ -829,7 +836,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 						p_char = framestr_first_conststr(q_char,hit_str);
 						if(p_char)
 						{
-							q_char = p_char;
+							q_char = p_char + frame_strlen(hit_str);
 							{
 								p_left_brack = framestr_frist_constchar(q_char,123);//{{
 								while(p_left_brack)
@@ -884,6 +891,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 																		memset(obj_node->index,0,str_len);
 																		str_len--;
 																		memcpy(obj_node->index,p_left_quot,str_len);
+																		//PDEBUG("obj_node->index::: %s\n",obj_node->index);
 																	}
 																}
 															}
@@ -905,6 +913,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 																	memset(obj_node->index,0,str_len);
 																	str_len--;
 																	memcpy(obj_node->index,p_left_quot,str_len);
+																	//PDEBUG("obj_node->index::: %s\n",obj_node->index);
 																}
 															}
 														}
@@ -944,6 +953,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 																		memset(obj_node->type,0,str_len);
 																		str_len--;
 																		memcpy(obj_node->type,p_left_quot,str_len);
+																		//PDEBUG("obj_node->type::: %s\n",obj_node->type);
 																	}
 																}
 															}
@@ -965,6 +975,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 																	memset(obj_node->type,0,str_len);
 																	str_len--;
 																	memcpy(obj_node->type,p_left_quot,str_len);
+																	//PDEBUG("obj_node->type::: %s\n",obj_node->type);
 																}
 															}
 														}
@@ -1004,6 +1015,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 																		memset(obj_node->id_,0,str_len);
 																		str_len--;
 																		memcpy(obj_node->id_,p_left_quot,str_len);
+																		//PDEBUG("obj_node->id_::: %s\n",obj_node->id_);
 																	}
 																}
 															}
@@ -1025,6 +1037,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 																	memset(obj_node->id_,0,str_len);
 																	str_len--;
 																	memcpy(obj_node->id_,p_left_quot,str_len);
+																	//PDEBUG("obj_node->id_::: %s\n",obj_node->id_);
 																}
 															}
 														}
@@ -1034,7 +1047,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 												}
 												if(res->search->head == NULL)
 												{
-													add_objinfo_after_head(res->search->head,obj_node);
+													add_objinfo_after_head(&(res->search->head),obj_node);
 													res->search->tail = obj_node;
 												}else{
 													add_objinfo_after_tail(&(res->search->tail),obj_node);
@@ -1050,54 +1063,55 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 														p_comma = p_right_brack;
 														is_obj_end = 1;
 													}
-
 													p_colon = framestr_frist_constchar(p_char,58);//:::
 													if(p_colon && p_colon < p_comma)
 													{
-														node = (KEY_VALUE_NODE *)ngx_pnalloc(res->mem,sizeof(KEY_VALUE_NODE));
+														//node = (KEY_VALUE_NODE *)ngx_pnalloc(res->mem,sizeof(KEY_VALUE_NODE));
+														node = (KEY_VALUE_NODE *)malloc(sizeof(KEY_VALUE_NODE));
 														if(node == NULL)
 														{
 															PERROR("system malloc error\n");
 															return -1;
 														}
-														memset(node,0,sizeof(KEY_VALUE_NODE));
-														
-														p_left_quot = framestr_frist_constchar(p_char,34);///,
+														memset((void*)node,0,sizeof(KEY_VALUE_NODE));
+														p_left_quot = framestr_frist_constchar(p_char,34);///"
 														if(p_left_quot && p_left_quot < p_colon)
 														{
 															p_left_quot++;
-															p_right_quot = framestr_frist_constchar(p_left_quot,34);///,
+															p_right_quot = framestr_frist_constchar(p_left_quot,34);///"
 															if(p_right_quot && p_right_quot < p_colon)
 															{
 																str_len = p_right_quot - p_left_quot;
 																if(str_len > 0)
 																{
 																	str_len++;
-																	node->key_ = (char *)ngx_pnalloc(res->mem,str_len);
+																	//node->key_ = (char *)ngx_pnalloc(res->mem,str_len);
+																	node->key_ = (char *)malloc(str_len);
 																	if(node->key_ == NULL)
 																	{
 																		PERROR("system malloc error\n");
 																		return -1;
 																	}
-																	memset(node->key_,0,str_len);
+																	memset((void*)node->key_,0,str_len);
 																	str_len--;
 																	memcpy(node->key_,p_left_quot,str_len);
+																	//PDEBUG("node->key_::: %s\n",node->key_);
 																}
 															}
 														}
-
-														p_left_quot = framestr_frist_constchar(p_colon,34);///,
+														p_left_quot = framestr_frist_constchar(p_colon,34);///"
 														if(p_left_quot && p_left_quot < p_comma)
 														{
 															p_left_quot++;
-															p_right_quot = framestr_frist_constchar(p_left_quot,34);///,
+															p_right_quot = framestr_frist_constchar(p_left_quot,34);///"
 															if(p_right_quot && p_right_quot < p_comma)
 															{
 																str_len = p_right_quot - p_left_quot;
 																if(str_len > 0)
 																{
 																	str_len++;
-																	node->value_ = (char *)ngx_pnalloc(res->mem,str_len);
+																	//node->value_ = (char *)ngx_pnalloc(res->mem,str_len);
+																	node->value_ = (char *)malloc(str_len);
 																	if(node->value_ == NULL)
 																	{
 																		PERROR("system malloc error\n");
@@ -1106,6 +1120,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 																	memset(node->value_,0,str_len);
 																	str_len--;
 																	memcpy(node->value_,p_left_quot,str_len);
+																	//PDEBUG("node->value_::: %s\n",node->value_);
 																}
 															}
 														}else{
@@ -1128,13 +1143,14 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 																		memset(node->value_,0,str_len);
 																		str_len--;
 																		memcpy(node->value_,p_left_quot,str_len);
+																		//PDEBUG("node->value_::: %s\n",node->value_);
 																	}
 																}
 															}
 														}
 													}
 													p_char = p_comma + 1;
-													add_keyvalue_after_head(obj_node->head_,node);
+													add_keyvalue_after_head(&(obj_node->head_),node);
 													node = NULL;
 													if(is_obj_end == 1)
 														break;
@@ -1152,7 +1168,6 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 										PDEBUG("error :: %s\n",p_left_brack);
 										break;
 									}
-
 									q_char = p_end_obj + 1;
 									p_left_brack = framestr_frist_constchar(q_char,123);//{{
 								}
@@ -1161,11 +1176,13 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 								p_right_square = framestr_frist_constchar(q_char,93);//]]]
 								if(p_right_square)
 								{
-									*bit_move = in_move + p_right_square - str + 1;
-									return 0;
+									ret = 0;
+									goto error_out;
 								}
-								else
+								else{
+									*bit_move = in_move + p_right_square - str + 1;
 									return 1;
+								}
 							}
 						}
 					}
@@ -1208,9 +1225,9 @@ error_out:
 	p_char = framestr_first_conststr(p_char,http_str);
 	if(p_char)
 	{
-		*bit_move += p_char - str; 
+		*bit_move = in_move + p_char - str; 
 	}else{
-		*bit_move += buf_len;
+		*bit_move = in_move + buf_len;
 	}
 	return ret;
 }
@@ -1238,6 +1255,7 @@ int analysis_es_recv_str(char *buf,ES_RESPOND *res,int* bit_move)
 			if(ret < 0)
 				return ret;
 			q_char += *bit_move;
+			PDEBUG("bit_move:: %d\n",*bit_move);
 			////////////////////////////////////////head is end
 			return analysis_http_json_str(q_char,res,bit_move);
 		}else{
@@ -1328,7 +1346,6 @@ void es_server_recv(void *data)
 				sem_post(&es_info.call_num);
 			}
 			index = get_recv_index();
-			PDEBUG("index :: %d\n",index);
 			if(index < 0)
 				break;
 			p_res = es_res_array + index;
@@ -1340,7 +1357,7 @@ void es_server_recv(void *data)
 		
 		memset(r_buf,0,SOCKET_BUFF_LEN);
 		ret = tcp_client_recv(es_info.es_fd_,r_buf,SOCKET_BUF_RECV);
-		PDEBUG("tcp_client_recv :: ret :: %d\n",ret);
+		PDEBUG("tcp_client_recv :: ret :: %d\nbuf:: %s",ret,r_buf);
 		if(ret <= 0)
 		{
 			ret = es_server_connect(es_info.es_fd_);
@@ -1355,7 +1372,7 @@ void es_server_recv(void *data)
 			p_char = frame_end_charstr(an_buf);
 			memcpy(p_char,r_buf,ret);
 			ret = analysis_es_recv_str(p_recv,p_res,&bit_move);
-			PDEBUG("analysis_es_recv_str :: ret :: %d\n",ret);
+			PDEBUG("analysis_es_recv_str :: ret :: %d bit_move:: %d\n",ret,bit_move);
 			memory_char_move_bit(an_buf,bit_move,AN_SOCKET_BUFF_LEN);
 		}else if(ret > SOCKET_BUF_RECV)
 		{
@@ -1376,6 +1393,7 @@ void es_server_recv(void *data)
 				es_info.is_run = 0;
 				break;
 			}
+			ret = 0;
 		}
 		
 	}
@@ -1779,7 +1797,15 @@ void es_asynchronous_test_functon(ES_RESPOND *ret)
 				}else{
 					for(p = q->head_ ; p != NULL;p =p->next_)
 					{
-						PDEBUG("ret->search->head key value:: %s : %s\n",p->key_,p->value_);
+						if(p->key_ && p->value_)
+							PDEBUG("ret->search->head key value:: %s : %s\n",p->key_,p->value_);
+						else if(p->key_ )
+						{
+							PDEBUG("ret->search->head key value:: %s : NULL\n",p->key_);
+						}else if(p->value_)
+						{
+							PDEBUG("ret->search->head key value:: NULL : %s\n",p->value_);
+						}
 					}
 				}
 			}
