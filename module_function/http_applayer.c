@@ -80,7 +80,8 @@ User-Agent: ES-HTTP-API\r\n\
 Content-type: application/json;charset=UTF-8\r\n\
 Host: %s:%d\r\n\
 Accept: application/json; charset=UTF-8\r\n\
-Connection: keep-alive",param->h_head,param->path,param->ip_str,param->port);
+Connection: keep-alive\r\n\
+Content-Length: %0\r\n\r\n",param->h_head,param->path,param->ip_str,param->port);
 	}
 	
 	return ret;

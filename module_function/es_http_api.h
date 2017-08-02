@@ -2,7 +2,18 @@
 #ifndef __PROGRAM_FRAMEWORK_ESHTTPAPI_H__
 #define __PROGRAM_FRAMEWORK_ESHTTPAPI_H__
 
+#define ES_HTTP_USE_MEMORY_POOL		1
+
+#ifndef	ES_HTTP_USE_MEMORY_POOL
+#define ngx_pool_t					void
+#define ngx_create_pool(size)
+#define ngx_pnalloc(pool,size)		malloc(size)
+#define ngx_reset_pool(pool)
+#define ngx_destroy_pool(pool)
+#else
 #include "memory_pool.h"
+#endif
+
 #include "key_value_part.h"
 #include "es_obj_info.h"
 #include "http_head_info.h"
@@ -38,7 +49,6 @@ typedef struct es_request{
 
 struct es_respond{
 	int sta_;//0 is init,1 is send,2 is recv,3is call back
-	int obj_num_;
 	
 	HTTP_HEAD_INFO *http;
 	char *message;

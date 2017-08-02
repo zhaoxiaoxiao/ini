@@ -200,7 +200,7 @@ static void* ngx_palloc_block(ngx_pool_t *pool, size_t size)
     new_->d.failed = 0;
 
     m += sizeof(ngx_pool_data_t);
-    m = ngx_align_ptr(m, NGX_ALIGNMENT);
+    //m = ngx_align_ptr(m, NGX_ALIGNMENT);
     new_->d.last = m + size;
 
     for (p = pool->current; p->d.next; p = p->d.next) {

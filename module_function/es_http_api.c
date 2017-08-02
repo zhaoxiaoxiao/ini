@@ -9,7 +9,7 @@
 #include "http_applayer.h"
 #include "es_http_api.h"
 
-#define ES_MEM_POLL_SIZE			(1536)
+#define ES_MEM_POLL_SIZE			(1024)
 
 #define SOCKET_BUFF_LEN				(1024)
 #define AN_SOCKET_BUFF_LEN			(SOCKET_BUFF_LEN * 2)
@@ -52,6 +52,142 @@ static ES_SERVER_INFO es_info = {0};
 static ES_RESPOND es_res_array[ES_RESPOND_ARRAY_ALL_LEN] = {0};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
+void es_respond_mem_free(ES_RESPOND* res)
+{
+	KEY_VALUE_NODE *node = NULL,*p_node = NULL;
+	OBJ_INFO *obj = NULL,*p_obj = NULL;
+	if(res->http)
+	{
+		if(res->http->ver)
+		{
+			free(res->http->ver);
+			res->http->ver = NULL;
+		}
+
+		if(res->http->note)
+		{
+			free(res->http->note);
+			res->http->note = NULL;
+		}
+
+		if(res->http->head_)
+		{
+			node = res->http->head_;
+			while(node)
+			{
+				if(node->key_)
+				{
+					free(node->key_);
+					node->key_ = NULL;
+				}
+
+				if(node->value_)
+				{
+					free(node->value_);
+					node->value_ = NULL;
+				}
+				p_node = node->next_;
+				free(node);
+				node = p_node;
+			}
+			res->http->head_ = NULL;
+		}
+		res->http = NULL;
+	}
+
+	if(res->message)
+	{
+		free(res->message);
+		res->message = NULL;
+	}
+
+	if(res->err_message)
+	{
+		free(res->err_message);
+		res->err_message = NULL;
+	}
+
+	if(res->search)
+	{
+		obj = res->search->head;
+		while(obj)
+		{
+			if(obj->index)
+			{
+				free(obj->index);
+				obj->index = NULL;
+			}
+			if(obj->type)
+			{
+				free(obj->type);
+				obj->type = NULL;
+			}
+			if(obj->id_)
+			{
+				free(obj->id_);
+				obj->id_ = NULL;
+			}
+			node = obj->head_;
+			while(node)
+			{
+				if(node->key_)
+				{
+					free(node->key_);
+					node->key_ = NULL;
+				}
+
+				if(node->value_)
+				{
+					free(node->value_);
+					node->value_ = NULL;
+				}
+				p_node = node->next_;
+				free(node);
+				node = p_node;
+			}
+			p_obj = obj->next_;
+			free(p_obj);
+			obj = p_obj;
+		}
+		free(res->search);
+		res->search = NULL;
+	}
+
+	if(res->req_buf)
+	{
+		free(res->req_buf);
+		res->req_buf = NULL;
+	}
+
+	if(res->req_)
+	{
+		if(res->req_->query_str)
+		{
+			free((void *)(res->req_->query_str));
+			res->req_->query_str = NULL;
+		}
+
+		if(res->req_->path_str)
+		{
+			free((void *)(res->req_->path_str));
+			res->req_->path_str = NULL;
+		}
+
+		if(res->req_->body_str)
+		{
+			free((void *)(res->req_->body_str));
+			res->req_->body_str = NULL;
+		}
+
+		free(res->req_);
+		res->req_ = NULL;
+	}
+}
+
+void es_respond_pool_free(ES_RESPOND* res)
+{
+}
+
 int es_server_connect(int fd)
 {
 	return connect_tcp_server(fd,es_info.port_,es_info.ip_addr);
@@ -341,10 +477,12 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 {
 	int buf_len = 0,str_len = 0,is_obj_end = 0,copy_len = 0,ret = 0,in_move = *bit_move;
 	char *p_char = str,*q_char = str,*p_colon = NULL,*p_left_brack = NULL,*p_right_brack = NULL,*p_comma = NULL,*p_start_obj = NULL,
-		*p_end_obj = NULL,*p_left_quot = NULL,*p_right_quot = NULL,*p_right_square = NULL,tmp_char[32] = {0},
+		*p_end_obj = NULL,*p_left_quot = NULL,*p_right_quot = NULL,*p_right_square = NULL,*p_next_start = NULL,tmp_char[32] = {0},
 		http_str[] = "HTTP",hit_str[] = "hits",total_str[] = "total",_index_str[] = "_index",_type_str[] = "_type",_id_str[] = "_id";
 	KEY_VALUE_NODE *node = NULL;
 	OBJ_INFO *obj_node = NULL;
+
+	p_next_start = framestr_first_conststr(p_char,http_str);
 	
 	buf_len = frame_strlen(str);
 	if(res->http == NULL)
@@ -401,6 +539,8 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 			p_left_brack = framestr_frist_constchar(q_char,123);//{{
 			while(p_left_brack)
 			{
+				if(p_next_start && p_left_brack > p_next_start)
+					break;
 				p_char = p_left_brack;
 				p_right_brack = framestr_frist_constchar(p_left_brack,125);//}}
 				if(p_right_brack)
@@ -419,7 +559,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 								PERROR("system malloc error\n");
 								return -1;
 							}
-							
+							memset(obj_node,0,sizeof(OBJ_INFO));
 							p_char = framestr_first_conststr(p_char,_index_str);
 							if(p_char && p_char < p_left_brack)
 							{
@@ -451,6 +591,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 													memset(obj_node->index,0,str_len);
 													str_len--;
 													memcpy(obj_node->index,p_left_quot,str_len);
+													//PDEBUG("obj_node->index:: %s\n",obj_node->index);
 												}
 											}
 										}
@@ -472,6 +613,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 												memset(obj_node->index,0,str_len);
 												str_len--;
 												memcpy(obj_node->index,p_left_quot,str_len);
+												//PDEBUG("obj_node->index:: %s\n",obj_node->index);
 											}
 										}
 									}
@@ -511,6 +653,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 													memset(obj_node->type,0,str_len);
 													str_len--;
 													memcpy(obj_node->type,p_left_quot,str_len);
+													//PDEBUG("obj_node->type:: %s\n",obj_node->type);
 												}
 											}
 										}
@@ -532,6 +675,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 												memset(obj_node->type,0,str_len);
 												str_len--;
 												memcpy(obj_node->type,p_left_quot,str_len);
+												//PDEBUG("obj_node->type:: %s\n",obj_node->type);
 											}
 										}
 									}
@@ -571,6 +715,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 													memset(obj_node->id_,0,str_len);
 													str_len--;
 													memcpy(obj_node->id_,p_left_quot,str_len);
+													//PDEBUG("obj_node->id_:: %s\n",obj_node->id_);
 												}
 											}
 										}
@@ -592,6 +737,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 												memset(obj_node->id_,0,str_len);
 												str_len--;
 												memcpy(obj_node->id_,p_left_quot,str_len);
+												//PDEBUG("obj_node->id_:: %s\n",obj_node->id_);
 											}
 										}
 									}
@@ -649,6 +795,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 												memset(node->key_,0,str_len);
 												str_len--;
 												memcpy(node->key_,p_left_quot,str_len);
+												//PDEBUG("node->key_:: %s\n",node->key_);
 											}
 										}
 									}
@@ -673,6 +820,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 												memset(node->value_,0,str_len);
 												str_len--;
 												memcpy(node->value_,p_left_quot,str_len);
+												//PDEBUG("node->value_:: %s\n",node->value_);
 											}
 										}
 									}else{
@@ -695,13 +843,15 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 													memset(node->value_,0,str_len);
 													str_len--;
 													memcpy(node->value_,p_left_quot,str_len);
+													//PDEBUG("node->value_:: %s\n",node->value_);
 												}
 											}
 										}
 									}
 								}
 								p_char = p_comma + 1;
-								add_keyvalue_after_head(&(obj_node->head_),node);
+								if(node)
+									add_keyvalue_after_head(&(obj_node->head_),node);
 								node = NULL;
 								if(is_obj_end == 1)
 									break;
@@ -709,22 +859,25 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 							*bit_move = in_move + p_end_obj - str + 1;
 							obj_node = NULL;
 						}else{
-							PDEBUG("error:: %s\n",p_left_brack);
+							PERROR("4 error:: %s\n",p_left_brack);
+							ret = -2;
+							goto error_out;
 						}
 					}else{
-						PDEBUG("error :: %s\n",p_left_brack);
+						//PDEBUG("5 error :: %s\n",p_left_brack);
 						break;
 					}
 				}else{
-					PDEBUG("error :: %s\n",p_left_brack);
+					//PDEBUG("6 error :: %s\n",p_left_brack);
 					break;
 				}
 
 				q_char = p_end_obj + 1;
+				//PDEBUG("7 debug :: %s\n",q_char);
 				p_left_brack = framestr_frist_constchar(q_char,123);//{{
 			}
 
-			PDEBUG("There is balance str:: %s can't analysis,need wait enought str\n",q_char);
+			//PDEBUG("out routing :: %s\n",q_char);
 			p_right_square = framestr_frist_constchar(q_char,93);//]]]
 			if(p_right_square)
 			{
@@ -732,7 +885,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 				goto error_out;
 			}
 			else{
-				*bit_move = in_move + p_right_square - str + 1;
+				*bit_move = in_move + q_char - str;
 				return 1;
 			}
 		}
@@ -841,6 +994,8 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 								p_left_brack = framestr_frist_constchar(q_char,123);//{{
 								while(p_left_brack)
 								{
+									if(p_next_start && p_left_brack > p_next_start)
+										break;
 									p_char = p_left_brack;
 									p_right_brack = framestr_frist_constchar(p_left_brack,125);//}}
 									if(p_right_brack)
@@ -859,7 +1014,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 													PERROR("system malloc error\n");
 													return -1;
 												}
-												
+												memset(obj_node,0,sizeof(OBJ_INFO));
 												p_char = framestr_first_conststr(p_char,_index_str);
 												if(p_char && p_char < p_left_brack)
 												{
@@ -1066,8 +1221,8 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 													p_colon = framestr_frist_constchar(p_char,58);//:::
 													if(p_colon && p_colon < p_comma)
 													{
-														//node = (KEY_VALUE_NODE *)ngx_pnalloc(res->mem,sizeof(KEY_VALUE_NODE));
-														node = (KEY_VALUE_NODE *)malloc(sizeof(KEY_VALUE_NODE));
+														node = (KEY_VALUE_NODE *)ngx_pnalloc(res->mem,sizeof(KEY_VALUE_NODE));
+														//node = (KEY_VALUE_NODE *)malloc(sizeof(KEY_VALUE_NODE));
 														if(node == NULL)
 														{
 															PERROR("system malloc error\n");
@@ -1085,8 +1240,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 																if(str_len > 0)
 																{
 																	str_len++;
-																	//node->key_ = (char *)ngx_pnalloc(res->mem,str_len);
-																	node->key_ = (char *)malloc(str_len);
+																	node->key_ = (char *)ngx_pnalloc(res->mem,str_len);
 																	if(node->key_ == NULL)
 																	{
 																		PERROR("system malloc error\n");
@@ -1110,8 +1264,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 																if(str_len > 0)
 																{
 																	str_len++;
-																	//node->value_ = (char *)ngx_pnalloc(res->mem,str_len);
-																	node->value_ = (char *)malloc(str_len);
+																	node->value_ = (char *)ngx_pnalloc(res->mem,str_len);
 																	if(node->value_ == NULL)
 																	{
 																		PERROR("system malloc error\n");
@@ -1150,7 +1303,8 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 														}
 													}
 													p_char = p_comma + 1;
-													add_keyvalue_after_head(&(obj_node->head_),node);
+													if(node)
+														add_keyvalue_after_head(&(obj_node->head_),node);
 													node = NULL;
 													if(is_obj_end == 1)
 														break;
@@ -1158,21 +1312,24 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 												*bit_move = in_move + p_end_obj - str + 1;
 												obj_node = NULL;
 											}else{
-												PDEBUG("error:: %s\n",p_left_brack);
+												PERROR("1 error:: %s\n",p_left_brack);
+												ret = -2;
+												goto error_out;
 											}
 										}else{
-											PDEBUG("error :: %s\n",p_left_brack);
+											//PDEBUG("2 error :: %s\n",p_left_brack);
 											break;
 										}
 									}else{
-										PDEBUG("error :: %s\n",p_left_brack);
+										//PDEBUG("3 error :: %s\n",p_left_brack);
 										break;
 									}
 									q_char = p_end_obj + 1;
+									//PDEBUG("4 debug :: %s\n",q_char);
 									p_left_brack = framestr_frist_constchar(q_char,123);//{{
 								}
 
-								PDEBUG("There is balance str:: %s can't analysis,need wait enought str\n",q_char);
+								//PDEBUG("out routing:: %s\n",q_char);
 								p_right_square = framestr_frist_constchar(q_char,93);//]]]
 								if(p_right_square)
 								{
@@ -1180,7 +1337,7 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 									goto error_out;
 								}
 								else{
-									*bit_move = in_move + p_right_square - str + 1;
+									*bit_move = in_move + q_char - str;
 									return 1;
 								}
 							}
@@ -1222,10 +1379,9 @@ int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
 	}
 	
 error_out:
-	p_char = framestr_first_conststr(p_char,http_str);
-	if(p_char)
+	if(p_next_start)
 	{
-		*bit_move = in_move + p_char - str; 
+		*bit_move = in_move + p_next_start - str; 
 	}else{
 		*bit_move = in_move + buf_len;
 	}
@@ -1245,39 +1401,39 @@ int analysis_es_recv_str(char *buf,ES_RESPOND *res,int* bit_move)
 	char http_str[] = "HTTP",*p_char = buf,*q_char = buf;
 
 	*bit_move = 0;
+	//PDEBUG("buf:: %s\n",buf);
 	p_char = framestr_first_conststr(p_char,http_str);
 	if(p_char)//begin flag or new recv mess
 	{
 		if(res->http == NULL)
 		{
-			PDEBUG("analysis http head first\n");
+			//PDEBUG("analysis http head first\n");
 			ret = analysis_http_head_str(p_char,res,bit_move);
 			if(ret < 0)
 				return ret;
 			q_char += *bit_move;
-			PDEBUG("bit_move:: %d\n",*bit_move);
+			//PDEBUG("bit_move:: %d\n",*bit_move);
 			////////////////////////////////////////head is end
 			return analysis_http_json_str(q_char,res,bit_move);
 		}else{
-			PDEBUG("analysis http body first\n");
+			//PDEBUG("analysis http body first\n");
 			return analysis_http_json_str(q_char,res,bit_move);
 		}
 	}else{/// no any begin flag,there data just data;
-		PDEBUG("analysis http body\n");
+		//PDEBUG("analysis http body\n");
 		return analysis_http_json_str(q_char,res,bit_move);
 	}
 }
 
 void inside_release_es_respond(ES_RESPOND* res)
 {
-	/*
 	if(res->sta_ != 3)
 	{
 		PERROR("never been here\n");
-	}*/
+	}
 	res->sta_ = 0;
-	res->obj_num_  = 0;
-
+	res->call_ = NULL;
+#ifdef ES_HTTP_USE_MEMORY_POOL	
 	res->http = NULL;
 	res->message = NULL;
 	res->err_message = NULL;
@@ -1285,12 +1441,18 @@ void inside_release_es_respond(ES_RESPOND* res)
 	
 	res->req_ = NULL;
 	res->req_buf = NULL;
-	res->call_ = NULL;
+	
 	if(es_info.is_run == 0)
 	{
 		ngx_destroy_pool(res->mem);
 	}else{
 		ngx_reset_pool(res->mem);
+	}
+#else
+	es_respond_mem_free(res);
+#endif
+	if(es_info.is_run)
+	{
 		sem_post(&es_info.free_num);
 	}
 }
@@ -1299,7 +1461,7 @@ void es_server_send(void *data)
 {
 	int ret = 0,index = 0;
 	ES_RESPOND *p_res = NULL;
-	PDEBUG("es_server_send start......\n");
+	PERROR("es_server_send start......\n");
 	while(1)
 	{
 		index = get_send_index();
@@ -1335,7 +1497,7 @@ void es_server_recv(void *data)
 	int ret = 0,index = 0,bit_move = 0;
 	char an_buf[AN_SOCKET_BUFF_LEN] = {0},r_buf[SOCKET_BUFF_LEN] = {0},*p_recv = an_buf,*p_char = NULL;
 	ES_RESPOND *p_res = NULL;
-	PDEBUG("es_server_recv start......\n");
+	PERROR("es_server_recv start......\n");
 	while(1)
 	{
 		if(ret == 0)
@@ -1357,7 +1519,7 @@ void es_server_recv(void *data)
 		
 		memset(r_buf,0,SOCKET_BUFF_LEN);
 		ret = tcp_client_recv(es_info.es_fd_,r_buf,SOCKET_BUF_RECV);
-		PDEBUG("tcp_client_recv :: ret :: %d\nbuf:: %s",ret,r_buf);
+		//PDEBUG("tcp_client_recv :: ret :: %d\nbuf:: %s\n",ret,r_buf);
 		if(ret <= 0)
 		{
 			ret = es_server_connect(es_info.es_fd_);
@@ -1381,7 +1543,7 @@ void es_server_recv(void *data)
 			p_char = frame_end_charstr(an_buf);
 			memcpy(p_char,r_buf,ret);
 			ret = analysis_es_recv_str(p_recv,p_res,&bit_move);
-			PDEBUG("analysis_es_recv_str :: ret :: %d\n",ret);
+			PDEBUG("analysis_es_recv_str :: ret :: %d bit_move:: %d\n",ret,bit_move);
 			memory_char_move_bit(an_buf,bit_move,AN_SOCKET_BUFF_LEN);
 		}
 		
@@ -1405,7 +1567,7 @@ void es_asynchronous_callback(void* data)
 {
 	int index = 0;
 	ES_RESPOND *p_res = NULL;
-	PDEBUG("es_asynchronous_callback start......\n");
+	PERROR("es_asynchronous_callback start......\n");
 	while(1)
 	{
 		index = get_call_index();
@@ -1418,8 +1580,8 @@ void es_asynchronous_callback(void* data)
 		}
 		if(p_res->call_)
 		{
+			//PDEBUG("call back success\n");
 			p_res->call_(p_res);
-			p_res->sta_ = 0;
 		}
 		inside_release_es_respond(p_res);
 		p_res = NULL;
@@ -1464,6 +1626,7 @@ int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type)
 	pthread_mutex_init(&es_info.asyn_mutex,NULL);
 	pthread_mutex_init(&es_info.bloc_mutex,NULL);
 	
+#ifdef ES_HTTP_USE_MEMORY_POOL	
 	for(i = 0;i < ES_RESPOND_ARRAY_ALL_LEN;i++)
 	{
 		p_res->mem = ngx_create_pool(ES_MEM_POLL_SIZE);
@@ -1471,6 +1634,8 @@ int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type)
 			return -1;
 		p_res++;
 	}
+#endif
+
 }
 
 void release_es_respond()
@@ -1483,8 +1648,9 @@ void release_es_respond()
 		PERROR("never been here\n");
 	}
 	res->sta_ = 0;
-	res->obj_num_  = 0;
+	res->call_ = NULL;
 
+#ifdef ES_HTTP_USE_MEMORY_POOL
 	res->http = NULL;
 	res->err_message = NULL;
 	res->message = NULL;
@@ -1492,13 +1658,16 @@ void release_es_respond()
 	
 	res->req_ = NULL;
 	res->req_buf = NULL;
-	res->call_ = NULL;
+
 	if(es_info.is_run == 0)
 	{
 		ngx_destroy_pool(res->mem);
 	}else{
 		ngx_reset_pool(res->mem);
 	}
+#else
+	es_respond_mem_free(res);
+#endif
 	pthread_mutex_unlock(&es_info.bloc_mutex);
 }
 
@@ -1694,8 +1863,8 @@ int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
 	return 0;
 error_out:	
 	p_res->sta_ = 0;
-	p_res->obj_num_  = 0;
-
+	p_res->call_ = NULL;
+#ifdef ES_HTTP_USE_MEMORY_POOL
 	p_res->http = NULL;
 	p_res->err_message = NULL;
 	p_res->message = NULL;
@@ -1703,9 +1872,11 @@ error_out:
 	
 	p_res->req_ = NULL;
 	p_res->req_buf = NULL;
-	p_res->call_ = NULL;
-	ngx_reset_pool(p_res->mem);
 	
+	ngx_reset_pool(p_res->mem);
+#else
+	es_respond_mem_free(p_res);
+#endif
 	es_info.insert_index--;
 	sem_post(&es_info.free_num);
 	pthread_mutex_unlock(&es_info.asyn_mutex);
@@ -1737,7 +1908,8 @@ void es_asynchronous_test_functon(ES_RESPOND *ret)
 {
 	KEY_VALUE_NODE *p = NULL;
 	OBJ_INFO *q = NULL;
-	
+
+	PDEBUG("ES TEST BEGIN!!!\n");
 	if(ret == NULL)
 	{
 		PERROR("The result is nuLL point\n");
@@ -1745,15 +1917,16 @@ void es_asynchronous_test_functon(ES_RESPOND *ret)
 	}
 
 	PDEBUG("ret->sta_ :: %d \n",ret->sta_);
-	PDEBUG("ret->obj_num_ :: %d \n",ret->obj_num_);
 
 	if(ret->http == NULL)
 	{
 		PERROR("The ES query http head is null\n");
 		return;
 	}else{
-		PDEBUG("ret->http->ver :: %s \n",ret->http->ver);
-		PDEBUG("ret->http->note :: %s \n",ret->http->note);
+		if(ret->http->ver)
+			PDEBUG("ret->http->ver :: %s \n",ret->http->ver);
+		if(ret->http->note)
+			PDEBUG("ret->http->note :: %s \n",ret->http->note);
 		PDEBUG("ret->http->ret :: %d \n",ret->http->ret);
 		PDEBUG("ret->http->body_len :: %d \n",ret->http->body_len);
 
@@ -1811,6 +1984,8 @@ void es_asynchronous_test_functon(ES_RESPOND *ret)
 			}
 		}
 	}
+
+	PDEBUG("ES TEST END!!!\n\n\n");
 }
 
 void es_server_query(VERB_METHOD verb,const char *path_str,const char *query_str,const char *body_str)

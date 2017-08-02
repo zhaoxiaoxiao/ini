@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
 	job.call = es_asynchronous_callback;
 	job.arg = NULL;
 	frame_add_job_queue(&job);
-#if 0
+	
 	req.path_str = "/";
 	req.query_str = "/_search?pretty";
 	req.body_str = NULL;
@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
 	{
 		PERROR("es_query_asynchronous error\n");
 	}
-#endif
+
 	req.path_str = "/elefence_terminal_info_00";
 	req.query_str = "/_search?pretty";
 	req.body_str = "{\"query\":{\"match\": { \"terminal_mac\": \"42-57-4A-EA-4D-28\" }}}";
@@ -124,6 +124,7 @@ int main(int argc, char *argv[])
 	{
 		PERROR("es_query_asynchronous error\n");
 	}
+
 	while(1)
 	{
 		sleep(60);
