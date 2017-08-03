@@ -37,6 +37,7 @@ typedef struct es_server_info{
 	int es_fd_;
 	int es_fd_b;
 	int is_run;
+	int is_over;
 	
 	int insert_index,send_index,recv_index,call_index;
 	sem_t free_num,send_num,recv_num,call_num;
@@ -197,11 +198,6 @@ int get_insert_index()
 {
 	int index = 0;
 	sem_wait(&es_info.free_num);
-	if(es_info.is_run == 0)
-	{
-		PERROR("ES server is stop and free_num is stop\n");
-		return -1;
-	}
 	index = es_info.insert_index;
 	es_info.insert_index++;
 	if(es_info.insert_index >= ES_RESPOND_ARRAY_LEN)
@@ -212,6 +208,7 @@ int get_insert_index()
 int get_send_index()
 {
 	int index = 0;
+	/*Ther is can't be run right in limit
 	if(es_info.is_run == 0)
 	{
 		sem_getvalue(&es_info.send_num,&index);
@@ -221,7 +218,10 @@ int get_send_index()
 			return -1;
 		}
 	}
+	*/
 	sem_wait(&es_info.send_num);
+	if(es_info.is_over == 1)
+		return -1;
 	index = es_info.send_index;
 	es_info.send_index++;
 	if(es_info.send_index >= ES_RESPOND_ARRAY_LEN)
@@ -232,6 +232,7 @@ int get_send_index()
 int get_recv_index()
 {
 	int index = 0;
+	/*Ther is can't be run right in limit
 	if(es_info.is_run == 0)
 	{
 		sem_getvalue(&es_info.send_num,&index);
@@ -240,12 +241,14 @@ int get_recv_index()
 			sem_getvalue(&es_info.recv_num,&index);
 			if(index == 0)
 			{
-				PERROR("ES server is stop and send_num is stop\n");
+				PERROR("ES server is stop and recv_num is stop\n");
 				return -1;
 			}
 		}
-	}
+	}*/
 	sem_wait(&es_info.recv_num);
+	if(es_info.is_over == 1)
+		return -1;
 	index = es_info.recv_index;
 	es_info.recv_index++;
 	if(es_info.recv_index >= ES_RESPOND_ARRAY_LEN)
@@ -256,6 +259,7 @@ int get_recv_index()
 int get_call_index()
 {
 	int index = 0;
+	/*Ther is can't be run right in limit
 	if(es_info.is_run == 0)
 	{
 		sem_getvalue(&es_info.send_num,&index);
@@ -272,8 +276,10 @@ int get_call_index()
 				}
 			}
 		}
-	}
+	}*/
 	sem_wait(&es_info.call_num);
+	if(es_info.is_over == 1)
+		return -1;
 	index = es_info.call_index;
 	es_info.call_index++;
 	if(es_info.call_index >= ES_RESPOND_ARRAY_LEN)
@@ -1455,6 +1461,7 @@ void inside_release_es_respond(ES_RESPOND* res)
 	if(es_info.is_run == 0)
 	{
 		ngx_destroy_pool(res->mem);
+		res->mem = NULL;
 	}else{
 		ngx_reset_pool(res->mem);
 	}
@@ -1617,6 +1624,7 @@ int es_server_init(const char *ip_str,unsigned short port,PROTOCOL_TYPE type)
 	if(es_info.es_fd_b < 0)
 		return es_info.es_fd_b;
 	es_info.is_run = 1;
+	es_info.is_over = 0;
 	memcpy(es_info.ip_addr,ip_str,frame_strlen(ip_str));
 	es_info.port_ = port;
 	
@@ -1672,6 +1680,7 @@ void release_es_respond()
 	if(es_info.is_run == 0)
 	{
 		ngx_destroy_pool(res->mem);
+		res->mem = NULL;
 	}else{
 		ngx_reset_pool(res->mem);
 	}
@@ -1905,30 +1914,39 @@ void es_server_destroy()
 	ES_RESPOND* res = es_res_array;
 	es_info.is_run = 0;
 
+
 	for(i = 0;i < ES_RESPOND_ARRAY_ALL_LEN;i++)
 	{
-		if(res->sta_ == 0)
+		if(res->sta_ != 0)
 		{
-			ngx_destroy_pool(res->mem);
-			res++;
-		}
-		else{
 			PDEBUG("i::%d res->sta_:: %d\n",i,res->sta_);
-			if(error_time >= 5 && res->sta_ == 2)
+			if(error_time < 5)
 			{
-				ngx_destroy_pool(res->mem);
-				res++;
+				i--;
+				error_time++;
+				sleep(1);
 				continue;
 			}
-			i--;error_time++;
-			sleep(1);
 		}
+#ifdef ES_HTTP_USE_MEMORY_POOL
+		if(res->mem)
+			ngx_destroy_pool(res->mem);
+		res->mem = NULL;
+#else
+		es_respond_mem_free(res);
+#endif
+		res++;
+		error_time = 0;
 	}
 
+	es_info.is_over = 1;
 	sem_destroy(&es_info.free_num);
-	sem_destroy(&es_info.send_num);
-	sem_destroy(&es_info.recv_num);
-	sem_destroy(&es_info.call_num);
+	if(sem_destroy(&es_info.send_num) < 0)
+		sem_post(&es_info.send_num);
+	if(sem_destroy(&es_info.recv_num) < 0)
+		sem_post(&es_info.recv_num);
+	if(sem_destroy(&es_info.call_num) < 0)
+		sem_post(&es_info.call_num);
 
 	pthread_mutex_destroy(&es_info.asyn_mutex);
 	pthread_mutex_destroy(&es_info.bloc_mutex);
