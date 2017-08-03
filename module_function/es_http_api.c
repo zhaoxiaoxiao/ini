@@ -309,7 +309,7 @@ void memory_char_move_bit(char *begin,int bit,int be_size)
 
 int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
 {
-	int buf_len = 0,str_len = 0,ret = 0;
+	int buf_len = 0,str_len = 0;
 	char *p_char = str,*q_char = str,*p_colon = NULL,
 		tmp_char[32] = {0},http_str[] = "HTTP",seq_str[] = "\r\n",cont_str[] = "Content-Length";
 	KEY_VALUE_NODE *node = NULL;
@@ -341,6 +341,8 @@ int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
 				memset(res->http->ver,0,str_len);
 				str_len--;
 				memcpy(res->http->ver,q_char,str_len);
+			}else{
+				PERROR("HTTP head version is null \n");
 			}
 
 			q_char = p_char + 1;
@@ -353,12 +355,12 @@ int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
 					memset(tmp_char,0,32);
 					memcpy(tmp_char,q_char,str_len);
 					res->http->ret = atoi(tmp_char);
+				}else{
+					PERROR("HTTP head return result is null\n");
 				}
 			}else{
 				PERROR("There is something wrong to find space division flag\n");
-				p_char = q_char;
-				ret = -2;
-				goto error_out;
+				goto head_nofull;
 			}
 
 			q_char = p_char + 1;
@@ -378,12 +380,12 @@ int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
 					memset(res->http->note,0,str_len);
 					str_len--;
 					memcpy(res->http->note,q_char,str_len);
+				}else{
+					PERROR("HTTP head note isnull\n");
 				}
 			}else{
 				PERROR("There is something wrong to find space division flag\n");
-				p_char = q_char;
-				ret = -2;
-				goto error_out;
+				goto head_nofull;
 			}
 
 			q_char = p_char + 2;
@@ -446,31 +448,22 @@ int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
 				res->http->body_len = atoi(p_char);
 			else{
 				PERROR("there is something wrong to find Content-Length key \n");
-				p_char = q_char;
-				ret = -2;
-				goto error_out;
+				goto head_nofull;
 			}
 			*bit_move += q_char - str;
 			return 0;
 		}else{
 			PERROR("There is something wrong to find space division flag\n");
-			p_char += 4;
-			ret = -2;
-			goto error_out;
+			goto head_nofull;
 		}
 	}else{
 		PERROR("this suitation may not happen any time.the respond http head need be null\n");
 		return -3;
 	}
-error_out:
-	p_char = framestr_first_conststr(p_char,http_str);
-	if(p_char)
-	{
-		*bit_move += p_char - str; 
-	}else{
-		*bit_move += buf_len;
-	}
-	return ret;
+head_nofull:
+	if(res->http)
+		res->http = NULL;
+	return 1;
 }
 
 int analysis_http_json_str(char *str,ES_RESPOND *res,int* bit_move)
@@ -1394,6 +1387,8 @@ error_out:
 ///return < 0 mean there is something wrong about analysis str buf
 // -1 mean malloc error
 // -2 mean buf format error
+// -3 need to another res struct
+// -4 mean res head is null but must no null
 ///bit_mover means must give up how many byte;
 int analysis_es_recv_str(char *buf,ES_RESPOND *res,int* bit_move)
 {
@@ -1409,7 +1404,7 @@ int analysis_es_recv_str(char *buf,ES_RESPOND *res,int* bit_move)
 		{
 			//PDEBUG("analysis http head first\n");
 			ret = analysis_http_head_str(p_char,res,bit_move);
-			if(ret < 0)
+			if(ret != 0)
 				return ret;
 			q_char += *bit_move;
 			//PDEBUG("bit_move:: %d\n",*bit_move);
@@ -1515,8 +1510,12 @@ void es_server_recv(void *data)
 			{
 				PERROR("never been here\n");
 			}
+			if(frame_strlen(an_buf) > 85)
+			{
+				goto direct_ana;
+			}
 		}
-		
+recv_again:		
 		memset(r_buf,0,SOCKET_BUFF_LEN);
 		ret = tcp_client_recv(es_info.es_fd_,r_buf,SOCKET_BUF_RECV);
 		//PDEBUG("tcp_client_recv :: ret :: %d\nbuf:: %s\n",ret,r_buf);
@@ -1533,18 +1532,13 @@ void es_server_recv(void *data)
 		{
 			p_char = frame_end_charstr(an_buf);
 			memcpy(p_char,r_buf,ret);
+direct_ana:
 			ret = analysis_es_recv_str(p_recv,p_res,&bit_move);
 			PDEBUG("analysis_es_recv_str :: ret :: %d bit_move:: %d\n",ret,bit_move);
 			memory_char_move_bit(an_buf,bit_move,AN_SOCKET_BUFF_LEN);
 		}else if(ret > SOCKET_BUF_RECV)
 		{
-			continue;
-		}else{//may be bug,TODO// never be here
-			p_char = frame_end_charstr(an_buf);
-			memcpy(p_char,r_buf,ret);
-			ret = analysis_es_recv_str(p_recv,p_res,&bit_move);
-			PDEBUG("analysis_es_recv_str :: ret :: %d bit_move:: %d\n",ret,bit_move);
-			memory_char_move_bit(an_buf,bit_move,AN_SOCKET_BUFF_LEN);
+			goto recv_again;
 		}
 		
 		if(ret < 0)
@@ -1555,7 +1549,8 @@ void es_server_recv(void *data)
 				es_info.is_run = 0;
 				break;
 			}
-			ret = 0;
+			if(ret != -4)
+				ret = 0;
 		}
 		
 	}
