@@ -1693,8 +1693,8 @@ void release_es_respond()
 
 ES_RESPOND* es_query_block(ES_REQUEST *req)
 {
-	int str_len = 0,i = 0,ret = 0;
-	char path_str[SOCKET_BUFF_LEN] = {0},recv_buf[SOCKET_BUFF_LEN] = {0};
+	int str_len = 0,i = 0,ret = 0,bit_move = 0;
+	char an_buf[AN_SOCKET_BUFF_LEN] = {0},path_str[SOCKET_BUFF_LEN] = {0},recv_buf[SOCKET_BUFF_LEN] = {0},*p_recv = an_buf,*p_char = NULL;
 	MAKE_HTTP_MESSAGE par = {0};
 	ES_RESPOND *p_res = NULL;
 
@@ -1706,7 +1706,7 @@ ES_RESPOND* es_query_block(ES_REQUEST *req)
 	p_res = es_res_array + ES_RESPOND_ARRAY_LEN;
 	
 	if(req->path_str && req->query_str)
-		sprintf(path_str,"%s?%s",req->path_str,req->query_str);
+		sprintf(path_str,"%s/%s",req->path_str,req->query_str);
 	else
 		sprintf(path_str,"%s",req->path_str);
 	par.h_head = verb_str_arr[req->verb];
@@ -1749,6 +1749,7 @@ send:
 	}
 recv:
 	ret = tcp_client_recv(es_info.es_fd_b,recv_buf,SOCKET_BUF_RECV);
+	//PDEBUG("tcp_client_recv :: ret :: %d\nbuf:: %s\n",ret,r_buf);
 	if(ret <= 0)
 	{
 		ret = es_server_connect(es_info.es_fd_b);
@@ -1758,13 +1759,23 @@ recv:
 		}else{
 			goto recv;
 		}
+	}else if(ret <= SOCKET_BUF_RECV)
+	{
+		p_char = frame_end_charstr(an_buf);
+		memcpy(p_char,recv_buf,ret);
+		ret = analysis_es_recv_str(p_recv,p_res,&bit_move);
+		PDEBUG("analysis_es_recv_str :: ret :: %d bit_move:: %d\n",ret,bit_move);
+		memory_char_move_bit(an_buf,bit_move,AN_SOCKET_BUFF_LEN);
 	}else if(ret > SOCKET_BUF_RECV)
 	{
 		goto recv;
 	}
-	printf("%s",recv_buf);
-	if(ret == SOCKET_BUF_RECV)
+	if(ret > 0)
 		goto recv;
+	if(ret < 0)
+	{
+		PERROR("There is something wrong about es recv buf analysis\n");
+	}
 	
 	return p_res;
 error_out:

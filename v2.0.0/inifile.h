@@ -1,3 +1,8 @@
+#ifndef __PROGRAM_INIFILE_VTWO_H__
+#define __PROGRAM_INIFILE_VTWO_H__
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 
 #define MAX_OPERATION_FILE_NUM			2//The macro define max inifile can operation same time
@@ -57,5 +62,10 @@ int delete_ini_section(int ini_fd,INI_PARAMETER *parameter);
 int add_ini_section(int ini_fd,INI_PARAMETER *parameter);
 
 void destroy_ini_source(int ini_fd);
+
+#ifdef __cplusplus
+}
+#endif
+#endif
 
 
