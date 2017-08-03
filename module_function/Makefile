@@ -37,6 +37,7 @@ LOCAL_SRC_CFILES := \
 		http_head_info.c	\
 		es_obj_info.c		\
 		es_search_result.c	\
+		es_test_function.c	\
 
 LOCAL_SRC_CCFILES := \
 

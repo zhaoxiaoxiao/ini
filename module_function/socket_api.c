@@ -254,7 +254,7 @@ recv_again:
 				recv_len = len + 1;
 				break;
 			case EBADF:
-				PERROR("EBADF :: %d\n",errno);
+				PERROR("EBADF :: %d\n",errno);//fd no effecitve
 				break;
 			case EFAULT:
 				PERROR("EFAULT :: %d\n",errno);
