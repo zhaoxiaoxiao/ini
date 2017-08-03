@@ -1605,6 +1605,7 @@ void es_asynchronous_callback(void* data)
 	}
 	
 	close(es_info.es_fd_);
+	es_info.es_fd_ = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1796,7 +1797,6 @@ int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
 	{
 		PERROR("never been here\n");
 	}
-	PDEBUG("index ::: %d\n\n",index);
 	p_res->call_ = call;
 	p_res->req_ = (ES_REQUEST*)ngx_pnalloc(p_res->mem,sizeof(ES_REQUEST));
 	if(p_res->req_ == NULL)
@@ -1941,20 +1941,19 @@ void es_server_destroy()
 
 	es_info.is_over = 1;
 	sem_destroy(&es_info.free_num);
-	if(sem_destroy(&es_info.send_num) < 0)
-		sem_post(&es_info.send_num);
-	if(sem_destroy(&es_info.recv_num) < 0)
-		sem_post(&es_info.recv_num);
-	if(sem_destroy(&es_info.call_num) < 0)
-		sem_post(&es_info.call_num);
-
+	sem_post(&es_info.send_num);
+	sem_destroy(&es_info.send_num) ;
+	sem_post(&es_info.recv_num);
+	sem_destroy(&es_info.recv_num);
+	sem_post(&es_info.call_num);
+	sem_destroy(&es_info.call_num);
+	
 	pthread_mutex_destroy(&es_info.asyn_mutex);
 	pthread_mutex_destroy(&es_info.bloc_mutex);
-
-	if(es_info.es_fd_)
+	if(es_info.es_fd_ > 0)
 		close(es_info.es_fd_);
 	es_info.es_fd_ = 0;
-	if(es_info.es_fd_b)
+	if(es_info.es_fd_b > 0)
 		close(es_info.es_fd_b);
 	es_info.es_fd_b = 0;
 }
