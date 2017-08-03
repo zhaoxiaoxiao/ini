@@ -197,6 +197,11 @@ int get_insert_index()
 {
 	int index = 0;
 	sem_wait(&es_info.free_num);
+	if(es_info.is_run == 0)
+	{
+		PERROR("ES server is stop and free_num is stop\n");
+		return -1;
+	}
 	index = es_info.insert_index;
 	es_info.insert_index++;
 	if(es_info.insert_index >= ES_RESPOND_ARRAY_LEN)
@@ -211,7 +216,10 @@ int get_send_index()
 	{
 		sem_getvalue(&es_info.send_num,&index);
 		if(index == 0)
+		{
+			PERROR("ES server is stop and send_num is stop\n");
 			return -1;
+		}
 	}
 	sem_wait(&es_info.send_num);
 	index = es_info.send_index;
@@ -232,6 +240,7 @@ int get_recv_index()
 			sem_getvalue(&es_info.recv_num,&index);
 			if(index == 0)
 			{
+				PERROR("ES server is stop and send_num is stop\n");
 				return -1;
 			}
 		}
@@ -257,7 +266,10 @@ int get_call_index()
 			{
 				sem_getvalue(&es_info.call_num,&index);
 				if(index == 0)
+				{
+					PERROR("ES server is stop and call_num is stop\n");
 					return -1;
+				}
 			}
 		}
 	}
@@ -436,6 +448,9 @@ int analysis_http_head_str(char *str,ES_RESPOND *res,int* bit_move)
 
 					add_keyvalue_after_head(&(res->http->head_),node);
 					node = NULL;
+				}else{
+					q_char = p_char + 2;
+					break;
 				}
 
 				q_char = p_char + 2;
@@ -1747,6 +1762,10 @@ error_out:
 	return NULL;
 }
 
+// < 0 is error
+// -1 mean malloc error
+// -2 mean server is stop
+// -3 mean paramter error
 int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
 {
 	ES_RESPOND *p_res = NULL;
@@ -1761,12 +1780,14 @@ int es_query_asynchronous(ES_REQUEST *req,RESPOND_CALLBACL call)
 		return -2;
 	pthread_mutex_lock(&es_info.asyn_mutex);
 	index = get_insert_index();
+	if(index < 0)
+		return -2;
 	p_res = es_res_array + index;
 	if(p_res->sta_ != 0)
 	{
 		PERROR("never been here\n");
 	}
-
+	PDEBUG("index ::: %d\n\n",index);
 	p_res->call_ = call;
 	p_res->req_ = (ES_REQUEST*)ngx_pnalloc(p_res->mem,sizeof(ES_REQUEST));
 	if(p_res->req_ == NULL)
@@ -1880,22 +1901,44 @@ error_out:
 
 void es_server_destroy()
 {
-	int i = 0;
+	int i = 0,error_time = 0;
 	ES_RESPOND* res = es_res_array;
 	es_info.is_run = 0;
-	/*
-	if(es_info.es_fd_)
-		close(es_info.es_fd_);
-	if(es_info.es_fd_b)
-		close(es_info.es_fd_b);*/
-	//memset(&es_info,0,sizeof(ES_SERVER_INFO));
-	
+
 	for(i = 0;i < ES_RESPOND_ARRAY_ALL_LEN;i++)
 	{
 		if(res->sta_ == 0)
+		{
 			ngx_destroy_pool(res->mem);
-		res++;
+			res++;
+		}
+		else{
+			PDEBUG("i::%d res->sta_:: %d\n",i,res->sta_);
+			if(error_time >= 5 && res->sta_ == 2)
+			{
+				ngx_destroy_pool(res->mem);
+				res++;
+				continue;
+			}
+			i--;error_time++;
+			sleep(1);
+		}
 	}
+
+	sem_destroy(&es_info.free_num);
+	sem_destroy(&es_info.send_num);
+	sem_destroy(&es_info.recv_num);
+	sem_destroy(&es_info.call_num);
+
+	pthread_mutex_destroy(&es_info.asyn_mutex);
+	pthread_mutex_destroy(&es_info.bloc_mutex);
+
+	if(es_info.es_fd_)
+		close(es_info.es_fd_);
+	es_info.es_fd_ = 0;
+	if(es_info.es_fd_b)
+		close(es_info.es_fd_b);
+	es_info.es_fd_b = 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
