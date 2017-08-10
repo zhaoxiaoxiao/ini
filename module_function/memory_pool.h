@@ -9,7 +9,7 @@ extern "C" {
 
 #define ngx_align(d, a)     (((d) + (a - 1)) & ~(a - 1))
 #define ngx_align_ptr(p, a)                                                   \
-    (u_char *) (((u_long) (p) + ((u_int) a - 1)) & ~((u_int) a - 1))
+    (u_char *) (((u_long) (p) + ((u_long) a - 1)) & ~((u_long) a - 1))
 
 typedef struct ngx_pool_s            ngx_pool_t;
 

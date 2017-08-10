@@ -57,6 +57,8 @@ void es_respond_mem_free(ES_RESPOND* res)
 {
 	KEY_VALUE_NODE *node = NULL,*p_node = NULL;
 	OBJ_INFO *obj = NULL,*p_obj = NULL;
+	if(!res)
+		return;
 	if(res->http)
 	{
 		if(res->http->ver)
@@ -93,6 +95,8 @@ void es_respond_mem_free(ES_RESPOND* res)
 			}
 			res->http->head_ = NULL;
 		}
+
+		free(res->http);
 		res->http = NULL;
 	}
 
@@ -147,7 +151,7 @@ void es_respond_mem_free(ES_RESPOND* res)
 				node = p_node;
 			}
 			p_obj = obj->next_;
-			free(p_obj);
+			free(obj);
 			obj = p_obj;
 		}
 		free(res->search);
