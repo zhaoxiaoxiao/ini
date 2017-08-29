@@ -68,13 +68,27 @@ void sig_catch(int sig)
 	return;
 }
 
+static int sigignore(int sig)
+{
+    struct sigaction sa = { .sa_handler = SIG_IGN, .sa_flags = 0 };
+
+    if (sigemptyset(&sa.sa_mask) == -1 || sigaction(sig, &sa, 0) == -1) {
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	(void)signal(SIGALRM,sig_catch);//timer
 	(void)signal(SIGINT, sig_catch);//ctrl + c 
 	(void)signal(SIGSEGV, sig_catch);//memory
 	(void)signal(SIGTERM, sig_catch);//kill
-
+	if (sigignore(SIGHUP) == -1)
+	{
+		PERROR("Failed to ignore SIGHUP\n");
+    }
+	
 	es_test_function();
 	while(1)
 	{
