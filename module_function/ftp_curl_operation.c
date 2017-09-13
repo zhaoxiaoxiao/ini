@@ -1,5 +1,6 @@
 
 #include <curl/curl.h>
+#include <pthread.h>
 
 #include "common.h"
 #include "frame_tool.h"
@@ -9,7 +10,7 @@
 
 #define BUFF_CMD_CURLFTP_LEN		1024
 
-#define MAX_LOCAL_FILE_SIZE			100*1024*1024
+#define MAX_LOCAL_FILE_SIZE			1024*1024*1024
 
 typedef struct curl_ftp_oper_fd{
 	char						*info_buf;
@@ -38,6 +39,16 @@ static CURL_FTP_OPER_FD *head = NULL,*tail = NULL;
 static pthread_mutex_t init_fd_mutex;
 
 //////////////////////////////////////////////////////////////////////////////////////
+void scan_file_list_under_ftpdir(const char *file_name,int file_size,FILE_NAME_MODE mode)
+{
+	if(mode == FILE_MODE)
+	{
+		PERROR("file name :: %s and size :: %d\n",file_name,file_size);
+	}else{
+		PERROR("folder name :: %s\n",file_name);
+	}
+}
+
 ///-rw-r--r--    1 503      503          3950 Apr 17 12:09 440305-743218887-1480827600-01779-ST_SOURCE_FJ_0001.bcp.ok
 const char* find_file_name_point(const char *file_line,int key_byte,int *file_size)
 {
@@ -96,7 +107,7 @@ size_t curl_ftp_scanfile_callback(void *buffer, size_t size, size_t nmemb, void 
 {
 	size_t file_name_len = 0;
 	int file_size = 0;
-	const char *p1 = buffer,*pp = NULL,*p = NULL;
+	const char *p1 = (const char *)buffer,*pp = NULL,*p = NULL;
 	CURL_FTP_OPER_FD *curr = (CURL_FTP_OPER_FD*)userp;
 
 	if(curr->file_name_buff == NULL)
@@ -104,7 +115,7 @@ size_t curl_ftp_scanfile_callback(void *buffer, size_t size, size_t nmemb, void 
 		curr->file_name_buff = (char *)malloc(BUFF_INCREASE_NUM_BASE);
 		if(curr->file_name_buff == NULL)
 		{
-			;
+			PERROR("There is something wrong with linux system malloc function\n");
 			return (size * nmemb);
 		}
 		memset(curr->file_name_buff,0,BUFF_INCREASE_NUM_BASE);
@@ -138,7 +149,7 @@ size_t curl_ftp_scanfile_callback(void *buffer, size_t size, size_t nmemb, void 
         {
             curr->call_function(pp,file_size,FOLDER_MODE);
         }
-		pp = find_file_name_point(pp,45,file_size);/////'-----'
+		pp = find_file_name_point(pp,45,&file_size);/////'-----'
         if(pp && curr->call_function)
         {
             curr->call_function(pp,file_size,FILE_MODE);
@@ -155,60 +166,90 @@ int init_curl_ftp_parame(CURL_FTP_OPER_FD *fop,CURL_FTP_INIT_PARAME *init_parame
 	int len = 0;
 	char *curr = NULL;
 	if(fop == NULL || init_parame == NULL)
-		return -2;
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 
 	if(fop->info_buf == NULL)
 	{
 		fop->info_buf_len = BUFF_INCREASE_NUM_BASE;
 		fop->info_buf = (char *)malloc(fop->info_buf_len);
 		if(fop->info_buf == NULL)
-			return -1;
+		{
+			PERROR("There is something wrong with linux system malloc function\n");
+			return SYSTEM_MALLOC_ERROR;
+		}
 		memset(fop->info_buf,0,fop->info_buf_len);
 	}
 	curr = fop->info_buf;
 	
 	if(init_parame->ip == NULL)
-		return -2;
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 	len = frame_strlen(init_parame->ip);
 	len++;
-	init_parame->info_buf_len -= len;
-	if(init_parame->info_buf_len < 0)
-		return -2;
+	fop->info_buf_len -= len;
+	if(fop->info_buf_len < 0)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 	memcpy(curr,init_parame->ip,(len - 1));
 	fop->ip = curr;
 	curr += len;
 
 	if(init_parame->user == NULL)
-		return -2;
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 	len = frame_strlen(init_parame->user);
 	len++;
-	init_parame->info_buf_len -= len;
-	if(init_parame->info_buf_len < 0)
-		return -2;
+	fop->info_buf_len -= len;
+	if(fop->info_buf_len < 0)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 	memcpy(curr,init_parame->user,(len - 1));
 	fop->user = curr;
 	curr += len;
 
 	if(init_parame->pass == NULL)
-		return -2;
+	{	
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 	len = frame_strlen(init_parame->pass);
 	len++;
-	init_parame->info_buf_len -= len;
-	if(init_parame->info_buf_len < 0)
-		return -2;
+	fop->info_buf_len -= len;
+	if(fop->info_buf_len < 0)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 	memcpy(curr,init_parame->pass,(len - 1));
 	fop->pass = curr;
 	curr += len;
 
 	if(init_parame->base_dir== NULL)
-		return -2;
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 	len = frame_strlen(init_parame->base_dir);
 	len += 2;
-	init_parame->info_buf_len -= len;
-	if(init_parame->info_buf_len < 0)
-		return -2;
+	fop->info_buf_len -= len;
+	if(fop->info_buf_len < 0)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 	memcpy(curr,init_parame->base_dir,(len - 1));
-	if(curr[len -2] == '/')
+	if(curr[len - 2] == '/')
 	{
 		curr[len - 1] = 0;
 	}else{
@@ -217,9 +258,12 @@ int init_curl_ftp_parame(CURL_FTP_OPER_FD *fop,CURL_FTP_INIT_PARAME *init_parame
 	fop->base_dir = curr;
 	curr += len;
 
-	len = sprintf(curr,init_parame->info_buf_len,"ftp://%s:%s@%s:%d/",fop->user,fop->pass,fop->ip,fop->port);
-	if(len >= init_parame->info_buf_len)
-		return -2;
+	len = snprintf(curr,fop->info_buf_len,"ftp://%s:%s@%s:%d/",fop->user,fop->pass,fop->ip,fop->port);
+	if(len >= fop->info_buf_len)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 	
 	fop->time_out = init_parame->timeout;
 	fop->base_dir = init_parame->base_dir;
@@ -247,43 +291,43 @@ void curl_scan_file_option(CURL_FTP_OPER_FD *curr,const char *url)
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_URL, url);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 	
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_WRITEDATA, curr);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
-	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_WRITEFUNCTION, url);
+	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_WRITEFUNCTION, curl_ftp_scanfile_callback);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTPLISTONLY, 0);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_TIMEOUT, curr->time_out);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_CONNECTTIMEOUT, 60);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_NOSIGNAL, 1);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	if(curr->ftp_mode == CURL_FTP_EPRT)
@@ -291,13 +335,13 @@ void curl_scan_file_option(CURL_FTP_OPER_FD *curr,const char *url)
 		ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTP_USE_EPRT, 1);
 		if(ret_set != CURLE_OK)
 		{
-			;
+			PERROR("There is something wrong with curl option set\n");
 		}
 	}else{
 		ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTP_USE_EPSV, 1);
 		if(ret_set != CURLE_OK)
 		{
-			;
+			PERROR("There is something wrong with curl option set\n");
 		}
 	}
 }
@@ -308,7 +352,7 @@ void curl_upload_file_option(CURL_FTP_OPER_FD *curr,const char *url,FILE *local,
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_URL, url);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	if(header_list)
@@ -316,50 +360,50 @@ void curl_upload_file_option(CURL_FTP_OPER_FD *curr,const char *url,FILE *local,
 		ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_POSTQUOTE, header_list);
 		if(ret_set != CURLE_OK)
 		{
-			;
+			PERROR("There is something wrong with curl option set\n");
 		}
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_READDATA, local);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_INFILESIZE, local_size);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_TIMEOUT, curr->time_out);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_CONNECTTIMEOUT, 60);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_NOSIGNAL, 1);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_UPLOAD, 1);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTP_CREATE_MISSING_DIRS, 1);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	if(curr->ftp_mode == CURL_FTP_EPRT)
@@ -367,13 +411,13 @@ void curl_upload_file_option(CURL_FTP_OPER_FD *curr,const char *url,FILE *local,
 		ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTP_USE_EPRT, 1);
 		if(ret_set != CURLE_OK)
 		{
-			;
+			PERROR("There is something wrong with curl option set\n");
 		}
 	}else{
 		ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTP_USE_EPSV, 1);
 		if(ret_set != CURLE_OK)
 		{
-			;
+			PERROR("There is something wrong with curl option set\n");
 		}
 	}
 }
@@ -384,31 +428,31 @@ void curl_download_file_option(CURL_FTP_OPER_FD *curr,const char *url,FILE *loca
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_URL, url);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_WRITEDATA, local);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_TIMEOUT, curr->time_out);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_CONNECTTIMEOUT, 60);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_NOSIGNAL, 1);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	if(curr->ftp_mode == CURL_FTP_EPRT)
@@ -416,13 +460,13 @@ void curl_download_file_option(CURL_FTP_OPER_FD *curr,const char *url,FILE *loca
 		ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTP_USE_EPRT, 1);
 		if(ret_set != CURLE_OK)
 		{
-			;
+			PERROR("There is something wrong with curl option set\n");
 		}
 	}else{
 		ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTP_USE_EPSV, 1);
 		if(ret_set != CURLE_OK)
 		{
-			;
+			PERROR("There is something wrong with curl option set\n");
 		}
 	}
 }
@@ -433,31 +477,31 @@ void cmd_curl_ftp_option(CURL_FTP_OPER_FD *curr,const char *url,struct curl_slis
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_URL, url);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_QUOTE, header_list);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_TIMEOUT, curr->time_out);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_CONNECTTIMEOUT, 60);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_NOSIGNAL, 1);
 	if(ret_set != CURLE_OK)
 	{
-		;
+		PERROR("There is something wrong with curl option set\n");
 	}
 
 	if(curr->ftp_mode == CURL_FTP_EPRT)
@@ -465,13 +509,13 @@ void cmd_curl_ftp_option(CURL_FTP_OPER_FD *curr,const char *url,struct curl_slis
 		ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTP_USE_EPRT, 1);
 		if(ret_set != CURLE_OK)
 		{
-			;
+			PERROR("There is something wrong with curl option set\n");
 		}
 	}else{
 		ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTP_USE_EPSV, 1);
 		if(ret_set != CURLE_OK)
 		{
-			;
+			PERROR("There is something wrong with curl option set\n");
 		}
 	}
 }
@@ -506,10 +550,21 @@ int init_curl_ftp_fd(CURL_FTP_INIT_PARAME *init_parame)
 		curr = (CURL_FTP_OPER_FD *)malloc(sizeof(CURL_FTP_OPER_FD));
 		if(curr == NULL)
 		{
-			return -1;
+			PERROR("There is something wrong with linux system malloc function\n");
+			return SYSTEM_MALLOC_ERROR;
 		}
 		memset((void *)curr,0,sizeof(CURL_FTP_OPER_FD));
 		curr->use_flag = 1;
+
+		if(head == NULL)
+		{
+			head == curr;
+			tail = curr;
+		}else{
+			tail->next = curr;
+			curr->pre = tail;
+			tail = curr;
+		}
 	}else{
 		curr->info_buf_len = BUFF_INCREASE_NUM_BASE;
 		memset(curr->info_buf,0,curr->info_buf_len);
@@ -520,16 +575,6 @@ int init_curl_ftp_fd(CURL_FTP_INIT_PARAME *init_parame)
 		curr->base_curl = NULL;
 	}
 	
-	if(head == NULL)
-	{
-		head == curr;
-		tail = curr;
-	}else{
-		tail->next = curr;
-		curr->pre = tail;
-		tail = curr;
-	}
-
 	ret = init_curl_ftp_parame(curr,init_parame);
 	if(ret < 0)
 		return ret;
@@ -543,9 +588,17 @@ int scan_curl_ftp_folder(int fop,const char *re_path,SCAN_CURL_FTP_FOLDER_CALLBA
 	char cmd_buf[BUFF_CMD_CURLFTP_LEN] = {0};
 	const char *pp = NULL;
 	CURL_FTP_OPER_FD *curr = NULL;
+	if(fop < 0)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 	if(call_function == NULL)
-		return -2;
-	
+	{
+		PERROR("There is no parameter of callback and set default callback function\n");
+		call_function = scan_file_list_under_ftpdir;
+	}
+	curr->call_function = call_function;
 	for(i = 0;i < fop;i++)
 	{
 		if(curr == NULL)
@@ -554,7 +607,10 @@ int scan_curl_ftp_folder(int fop,const char *re_path,SCAN_CURL_FTP_FOLDER_CALLBA
 			curr = curr->next;
 
 		if(curr == NULL)
-			return -2;
+		{
+			PERROR("There is something wrong with teansmit paramter error\n");
+			return TRANSMIT_PARAMETER_ERROR;
+		}
 	}
 	pthread_mutex_lock(&curr->scan_mutex);
 	if(curr->p_curl)
@@ -565,7 +621,11 @@ int scan_curl_ftp_folder(int fop,const char *re_path,SCAN_CURL_FTP_FOLDER_CALLBA
 
 	curr->p_curl = curl_easy_init();
 	if(curr->p_curl == NULL)
-		return -3;
+	{
+		PERROR("There is something worong with system call function\n");
+		pthread_mutex_unlock(&curr->scan_mutex);
+		return SYSTEM_FUNCTION_CALL_ERROR;
+	}
 
 	if(re_path)
 	{
@@ -582,7 +642,7 @@ int scan_curl_ftp_folder(int fop,const char *re_path,SCAN_CURL_FTP_FOLDER_CALLBA
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		;
+		PERROR("There is something with curl ftp operation\n");
 	}
 	
 	curl_easy_cleanup(curr->p_curl);
@@ -592,10 +652,11 @@ int scan_curl_ftp_folder(int fop,const char *re_path,SCAN_CURL_FTP_FOLDER_CALLBA
     pp = find_file_name_point(pp,100,&file_size);/////'ddddddd'
     if(pp)
     {
-        curr->call_function(pp,file_size,FOLDER_MODE);
+    	if(curr->call_function)
+        	curr->call_function(pp,file_size,FOLDER_MODE);
     }else{
     	pp = find_file_name_point(pp,45,&file_size);/////'---'
-    	if(pp)
+    	if(pp && curr->call_function)
     	{
     		curr->call_function(pp,file_size,FILE_MODE);
     	}
@@ -615,8 +676,25 @@ int upload_curl_ftp_file(int fop,const char *up_file,const char *re_path,const c
 	CURL_FTP_OPER_FD *curr = NULL;
 	struct curl_slist *header_list = NULL;
 	
-	if(up_file == NULL || head == NULL)
-		return -2;
+	if( up_file == NULL || fop < 0 )
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
+
+	for(i = 0;i < fop;i++)
+	{
+		if(curr == NULL)
+			curr = head;
+		else
+			curr = curr->next;
+
+		if(curr == NULL)
+		{
+			PERROR("There is something wrong with teansmit paramter error\n");
+			return TRANSMIT_PARAMETER_ERROR;
+		}
+	}
 
 	if(to_name == NULL)
 	{
@@ -630,23 +708,6 @@ int upload_curl_ftp_file(int fop,const char *up_file,const char *re_path,const c
 	if(up_name == NULL)
 		up_name = up_file;
 
-	up_fp = fopen(up_file, "rb");
-	if(up_fp == NULL)
-	{
-		return -3;
-	}
-
-	for(i = 0;i < fop;i++)
-	{
-		if(curr == NULL)
-			curr = head;
-		else
-			curr = curr->next;
-
-		if(curr == NULL)
-			return -2;
-	}
-
 	if(curr->p_curl)
 	{
 		curl_easy_cleanup(curr->p_curl);
@@ -655,7 +716,17 @@ int upload_curl_ftp_file(int fop,const char *up_file,const char *re_path,const c
 
 	curr->p_curl = curl_easy_init();
 	if(curr->p_curl == NULL)
-		return -3;
+	{
+		PERROR("There is something worong with system call function\n");
+		return SYSTEM_FUNCTION_CALL_ERROR;
+	}
+
+	up_fp = fopen(up_file, "rb");
+	if(up_fp == NULL)
+	{
+		PERROR("There is something worong with system call function\n");
+		return SYSTEM_FUNCTION_CALL_ERROR;
+	}
 
 	if(re_name)
 	{
@@ -678,7 +749,7 @@ int upload_curl_ftp_file(int fop,const char *up_file,const char *re_path,const c
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		;
+		PERROR("There is something with curl ftp operation\n");
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -694,6 +765,12 @@ int download_curl_ftp_file(int fop,const char *down_file,const char *re_path,con
 	int i = 0;
 	CURL_FTP_OPER_FD *curr = NULL;
 
+	if(fop < 0 || down_file == NULL || to_patn_name == NULL)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
+
 	for(i = 0;i < fop;i++)
 	{
 		if(curr == NULL)
@@ -702,7 +779,10 @@ int download_curl_ftp_file(int fop,const char *down_file,const char *re_path,con
 			curr = curr->next;
 
 		if(curr == NULL)
-			return -2;
+		{
+			PERROR("There is something wrong with teansmit paramter error\n");
+			return TRANSMIT_PARAMETER_ERROR;
+		}
 	}
 
 	if(curr->p_curl)
@@ -713,11 +793,17 @@ int download_curl_ftp_file(int fop,const char *down_file,const char *re_path,con
 
 	curr->p_curl = curl_easy_init();
 	if(curr->p_curl == NULL)
-		return -3;
+	{
+		PERROR("There is something worong with system call function\n");
+		return SYSTEM_FUNCTION_CALL_ERROR;
+	}
 
 	down_fp = fopen(to_patn_name, "wab");
 	if(down_fp == NULL)
-		return -3;
+	{
+		PERROR("There is something worong with system call function\n");
+		return SYSTEM_FUNCTION_CALL_ERROR;
+	}
 
 	if(re_path)
 	{
@@ -730,7 +816,7 @@ int download_curl_ftp_file(int fop,const char *down_file,const char *re_path,con
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		;
+		PERROR("There is something with curl ftp operation\n");
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -746,8 +832,11 @@ int rename_curl_ftp_file(int fop,const char *origin_name,const char *re_path,con
 	CURL_FTP_OPER_FD *curr = NULL;
 	struct curl_slist *header_list = NULL;
 	
-	if(origin_name == NULL || to_name == NULL)
-		return -2;
+	if(origin_name == NULL || to_name == NULL || fop < 0)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 
 	for(i = 0;i < fop;i++)
 	{
@@ -757,7 +846,10 @@ int rename_curl_ftp_file(int fop,const char *origin_name,const char *re_path,con
 			curr = curr->next;
 
 		if(curr == NULL)
-			return -2;
+		{
+			PERROR("There is something wrong with teansmit paramter error\n");
+			return TRANSMIT_PARAMETER_ERROR;
+		}
 	}
 
 	if(curr->p_curl)
@@ -768,7 +860,10 @@ int rename_curl_ftp_file(int fop,const char *origin_name,const char *re_path,con
 
 	curr->p_curl = curl_easy_init();
 	if(curr->p_curl == NULL)
-		return -3;
+	{
+		PERROR("There is something worong with system call function\n");
+		return SYSTEM_FUNCTION_CALL_ERROR;
+	}
 
 	sprintf(cmd_buf,"RNFR %s",origin_name);
 	header_list = curl_slist_append(header_list, cmd_buf);
@@ -788,7 +883,7 @@ int rename_curl_ftp_file(int fop,const char *origin_name,const char *re_path,con
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		;
+		PERROR("There is something with curl ftp operation\n");
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -803,8 +898,11 @@ int delete_curl_ftp_file(int fop,const char *re_path,const char *file_name)
 	CURL_FTP_OPER_FD *curr = NULL;
 	struct curl_slist *header_list = NULL;
 	
-	if(file_name == NULL)
-		return -2;
+	if(file_name == NULL || fop < 0)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 
 	for(i = 0;i < fop;i++)
 	{
@@ -814,7 +912,10 @@ int delete_curl_ftp_file(int fop,const char *re_path,const char *file_name)
 			curr = curr->next;
 
 		if(curr == NULL)
-			return -2;
+		{
+			PERROR("There is something wrong with teansmit paramter error\n");
+			return TRANSMIT_PARAMETER_ERROR;
+		}
 	}
 
 	if(curr->p_curl)
@@ -825,7 +926,10 @@ int delete_curl_ftp_file(int fop,const char *re_path,const char *file_name)
 
 	curr->p_curl = curl_easy_init();
 	if(curr->p_curl == NULL)
-		return -3;
+	{
+		PERROR("There is something worong with system call function\n");
+		return SYSTEM_FUNCTION_CALL_ERROR;
+	}
 
 	sprintf(cmd_buf,"DELE %s",file_name);
 	header_list = curl_slist_append(header_list, cmd_buf);
@@ -842,7 +946,7 @@ int delete_curl_ftp_file(int fop,const char *re_path,const char *file_name)
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		;
+		PERROR("There is something with curl ftp operation\n");
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -857,8 +961,11 @@ int delete_curl_ftp_dir(int fop,const char *re_path)
 	CURL_FTP_OPER_FD *curr = NULL;
 	struct curl_slist *header_list = NULL;
 	
-	if(re_path == NULL)
-		return -2;
+	if(re_path == NULL || fop < 0)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 
 	for(i = 0;i < fop;i++)
 	{
@@ -868,7 +975,10 @@ int delete_curl_ftp_dir(int fop,const char *re_path)
 			curr = curr->next;
 
 		if(curr == NULL)
-			return -2;
+		{
+			PERROR("There is something wrong with teansmit paramter error\n");
+			return TRANSMIT_PARAMETER_ERROR;
+		}
 	}
 
 	if(curr->p_curl)
@@ -879,7 +989,10 @@ int delete_curl_ftp_dir(int fop,const char *re_path)
 
 	curr->p_curl = curl_easy_init();
 	if(curr->p_curl == NULL)
-		return -3;
+	{
+		PERROR("There is something worong with system call function\n");
+		return SYSTEM_FUNCTION_CALL_ERROR;
+	}
 
 	sprintf(cmd_buf,"RMD %s",re_path);
 	header_list = curl_slist_append(header_list, cmd_buf);
@@ -891,7 +1004,7 @@ int delete_curl_ftp_dir(int fop,const char *re_path)
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		;
+		PERROR("There is something with curl ftp operation\n");
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -906,8 +1019,11 @@ int create_curl_ftp_dir(int fop,const char *re_path)
 	CURL_FTP_OPER_FD *curr = NULL;
 	struct curl_slist *header_list = NULL;
 	
-	if(re_path == NULL)
-		return -2;
+	if(re_path == NULL || fop < 0)
+	{
+		PERROR("There is something wrong with teansmit paramter error\n");
+		return TRANSMIT_PARAMETER_ERROR;
+	}
 
 	for(i = 0;i < fop;i++)
 	{
@@ -917,7 +1033,10 @@ int create_curl_ftp_dir(int fop,const char *re_path)
 			curr = curr->next;
 
 		if(curr == NULL)
-			return -2;
+		{
+			PERROR("There is something wrong with teansmit paramter error\n");
+			return TRANSMIT_PARAMETER_ERROR;
+		}
 	}
 
 	if(curr->p_curl)
@@ -928,7 +1047,10 @@ int create_curl_ftp_dir(int fop,const char *re_path)
 
 	curr->p_curl = curl_easy_init();
 	if(curr->p_curl == NULL)
-		return -3;
+	{
+		PERROR("There is something worong with system call function\n");
+		return SYSTEM_FUNCTION_CALL_ERROR;
+	}
 
 	sprintf(cmd_buf,"MKD %s",re_path);
 	header_list = curl_slist_append(header_list, cmd_buf);
@@ -940,18 +1062,74 @@ int create_curl_ftp_dir(int fop,const char *re_path)
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		;
+		PERROR("There is something with curl ftp operation\n");
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
 	return (int)ret;
 }
 
+void reset_curl_ftp_fd(int fop)
+{
+	int i = 0;
+	CURL_FTP_OPER_FD *curr = NULL;
+	if(fop < 0)
+		return;
+	for(i = 0;i < fop;i++)
+	{
+		if(curr == NULL)
+			curr = head;
+		else
+			curr = curr->next;
+
+		if(curr == NULL)
+		{
+			PERROR("There is something wrong with teansmit paramter error\n");
+			return;
+		}
+	}
+
+	curr->use_flag = 0;
+}
+
 void global_curl_ftp_cleanup()
 {
 	CURL_FTP_OPER_FD *curr = NULL;
 	pthread_mutex_lock(&init_fd_mutex);
+	if(head)
+	{
+		do
+		{
+			if(curr == NULL)
+			{
+				curr = tail;
+			}
+			
+			if(curr->info_buf)
+			{
+				free(curr->info_buf);
+				curr->info_buf = NULL;
+			}
 
+			if(curr->file_name_buff)
+			{
+				free(curr->file_name_buff);
+				curr->file_name_buff = NULL;
+			}
+
+			if(curr->pre)
+			{
+				curr = curr->pre;
+				free(curr->next);
+				curr->next = NULL;
+			}else{
+				free(curr);
+				curr = NULL;
+			}
+		}while(curr);
+	}
+
+	head = tail = NULL;
 	pthread_mutex_unlock(&init_fd_mutex);
 }
 

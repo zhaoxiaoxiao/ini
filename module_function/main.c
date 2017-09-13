@@ -68,9 +68,11 @@ void sig_catch(int sig)
 	return;
 }
 
-static int sigignore(int sig)
+int sigignore(int sig)
 {
-    struct sigaction sa = { .sa_handler = SIG_IGN, .sa_flags = 0 };
+    struct sigaction sa = {0};
+	sa.sa_handler = SIG_IGN;
+	sa.sa_flags = 0;
 
     if (sigemptyset(&sa.sa_mask) == -1 || sigaction(sig, &sa, 0) == -1) {
         return -1;

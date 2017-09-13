@@ -5,6 +5,10 @@
 extern "C" {
 #endif
 
+#define SYSTEM_MALLOC_ERROR			-1
+#define TRANSMIT_PARAMETER_ERROR	-2
+#define SYSTEM_FUNCTION_CALL_ERROR	-3
+
 typedef enum file_name_mode{
 	FILE_MODE,
 	FOLDER_MODE,
@@ -46,6 +50,8 @@ int delete_curl_ftp_file(int fop,const char *re_path,const char *file_name);
 int delete_curl_ftp_dir(int fop,const char *re_path);
 
 int create_curl_ftp_dir(int fop,const char *re_path);
+
+void reset_curl_ftp_fd(int fop);
 
 void global_curl_ftp_cleanup();
 

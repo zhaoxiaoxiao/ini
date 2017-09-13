@@ -13,7 +13,7 @@ CFLAGS :=
 
 INCLUDE := #-I./include -I/usr/local/log4c/include
 LDFLAGS := #-L/usr/lib64/mysql -L/usr/local/log4c/lib -L/usr/local/lib
-LIBRARY := -pthread -lrt #-lmysqlclient -llog4c
+LIBRARY := -pthread -lrt -lcurl #-lmysqlclient -llog4c
 
 BUILD_DIR = $(MODULE)_build
 
@@ -38,6 +38,7 @@ LOCAL_SRC_CFILES := \
 		es_obj_info.c		\
 		es_search_result.c	\
 		es_test_function.c	\
+		ftp_curl_operation.c	\
 
 LOCAL_SRC_CCFILES := \
 
