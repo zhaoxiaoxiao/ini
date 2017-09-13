@@ -3,13 +3,15 @@
 #include <sys/time.h>
 
 #include "common.h"
+#include "frame_tool.h"
 #include "es_test_function.h"
 
 static struct itimerval itv = {0};
 
 void doing_defore_exiting()
 {
-	es_test_exit();
+	PERROR("There is prepare exiting and do some clean work\n");
+	return;
 }
 
 void clock_init()
@@ -91,11 +93,7 @@ int main(int argc, char *argv[])
 		PERROR("Failed to ignore SIGHUP\n");
     }
 	
-	es_test_function();
-	while(1)
-	{
-		sleep(60);
-	}
+	copy_file_to_targetfile(argv[0],"xiaoxiao.ok");
 	doing_defore_exiting();
 	return 0;
 }

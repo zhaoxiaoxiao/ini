@@ -10,7 +10,6 @@
 
 #define BUFF_CMD_CURLFTP_LEN		1024
 
-#define MAX_LOCAL_FILE_SIZE			1024*1024*1024
 
 typedef struct curl_ftp_oper_fd{
 	char						*info_buf;
@@ -268,21 +267,6 @@ int init_curl_ftp_parame(CURL_FTP_OPER_FD *fop,CURL_FTP_INIT_PARAME *init_parame
 	fop->time_out = init_parame->timeout;
 	fop->base_dir = init_parame->base_dir;
 	fop->port = init_parame->port;
-}
-
-int get_local_file_size(const char *path_file)
-{
-	struct stat st;
-	if (-1 == stat(path_file,&st))
-    {
-        return 0;          
-    }
-    if ( ((int)st.st_size <= 0) || (st.st_size > MAX_LOCAL_FILE_SIZE) )
-    {
-        return 0;          
-    }
-    
-    return (int)st.st_size;
 }
 
 void curl_scan_file_option(CURL_FTP_OPER_FD *curr,const char *url)

@@ -8,7 +8,7 @@
 
 static int mutex_filelock = 0;
 static const char mutex_file[] = "/tmp/single_instance.lock";
-
+/////////////////////////////////////////////////////////////////////////////////////////////////////
 int lock_mutex_file()
 {
 	int rc = 0;
@@ -53,6 +53,21 @@ int cpu_isbig_endian()
 		PDEBUG("Notice::::::This cpu is big endian!!!!!!!!!!\n");
 		return 1;
 	}
+}
+
+int get_local_file_size(const char *path_file)
+{
+	struct stat st;
+	if (-1 == stat(path_file,&st))
+    {
+        return 0;          
+    }
+    if ( ((int)st.st_size <= 0))
+    {
+        return 0;          
+    }
+    
+    return (int)st.st_size;
 }
 
 char *frame_end_charstr(char *buff)
@@ -285,5 +300,100 @@ int frame_call_shell_cmd(const char *cmd)
     }  
   
     return 0; 
+}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void copy_file_to_targetfile(const char *src_file,const char *dest_file)
+{
+	int result = 0,len = 0;
+	char copy_buf[1024] = {0};
+	FILE *in = NULL,*out = NULL;
+	PERROR("%s copy to %s\n",src_file,dest_file);
+
+	result = access(src_file, F_OK);
+    if(result != 0)
+    {
+        PERROR("file  %s read error!errno:%d,err:%s\n",src_file,errno,strerror(errno));
+        return;
+    }
+
+	in = fopen(src_file,"rb");
+    if (NULL == in)
+    {
+        PERROR("open File %s failed!errno:%d,err:%s",src_file,errno,strerror(errno));
+        return;            
+    }
+
+	out = fopen(dest_file,"wab");
+    if (NULL == out)
+    {
+        PERROR("open File %s failed!errno:%d,err:%s",dest_file,errno,strerror(errno));
+        fclose(in);
+        return;            
+    }
+	do{
+        len=fread(copy_buf,1,1024,in);
+        if(len > 0)
+        {
+            fwrite(copy_buf,1,len,out);
+            memset(copy_buf,0,1024);
+        }
+    }while(len > 0);
+    fclose(out);  
+    fclose(in);
+	return;
+}
+
+#define MAC_FULL_PATH_LEN			1024
+
+void foreach_filedir_under_folder(const char *dir_path)
+{
+	int len = 0;
+	DIR *p_dir = NULL;
+	struct dirent *p_dirent = NULL;
+	char folder_path[MAC_FULL_PATH_LEN] = {0},file_dir_path[MAC_FULL_PATH_LEN] = {0};
+
+	if(dir_path == NULL)
+	{
+		PERROR("The transmit parameter is null but can't be null\n");
+		return;
+	}
+	len = frame_strlen(dir_path);
+	if(len >= (MAC_FULL_PATH_LEN - 1))
+	{
+		PERROR("The dir full path too long\n");
+		return;
+	}
+
+	memcpy(folder_path,dir_path,len);
+	if(folder_path[len - 1] != '/')
+		folder_path[len] = '/';
+
+	p_dir = opendir(folder_path);
+	do{
+		p_dirent = readdir(p_dir);
+		if(p_dirent)
+		{
+			if(p_dirent->d_type == DT_DIR)
+			{
+				PDEBUG("Folder name:: ");
+			}else{
+				len = snprintf(file_dir_path,MAC_FULL_PATH_LEN,"%s%s",dir_path,p_dirent->d_name);
+				if(len < MAC_FULL_PATH_LEN)
+					PDEBUG("File size %d name:: ",get_local_file_size(file_dir_path));
+				else
+					PDEBUG("File name len more than buff can't get size and name:: ");
+			}
+			printf("%s\n",p_dirent->d_name);
+		}
+	}while(p_dirent);
+	closedir(p_dir);	 
+}
+
+void call_file_system_running(const char *file_name)
+{
+	if(execve(file_name,NULL,NULL) < 0)
+	{
+		perror("execl error!");
+	}
 }
 
