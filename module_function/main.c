@@ -4,7 +4,7 @@
 
 #include "common.h"
 #include "frame_tool.h"
-#include "es_test_function.h"
+#include "ftp_curl_operation.h"
 
 static struct itimerval itv = {0};
 
@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
 		PERROR("Failed to ignore SIGHUP\n");
     }
 	
-	copy_file_to_targetfile(argv[0],"xiaoxiao.ok");
+	test_curl_ftp_function();
 	doing_defore_exiting();
 	return 0;
 }

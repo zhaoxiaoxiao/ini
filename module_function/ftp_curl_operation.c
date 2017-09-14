@@ -55,9 +55,9 @@ const char* find_file_name_point(const char *file_line,int key_byte,int *file_si
 	char file_size_buff[16] = {0};
 	int file_flag = 0,sapce_flag = 0,space_num = 0;
     const char *pp = NULL,*p_size = NULL;
-    if(strlen(file_line) <= 49)
+    if(frame_strlen(file_line) <= 49)
         return pp;
-    
+	
     for(pp = file_line;*pp > 0;pp++)
     {
         if(file_flag == 0)
@@ -91,8 +91,10 @@ const char* find_file_name_point(const char *file_line,int key_byte,int *file_si
         }else{
             if(sapce_flag)
                 sapce_flag = 0;
-			if(space_num == 4)
+			if(space_num == 4 && p_size == NULL)
+			{
 				p_size = pp;
+			}
             if(space_num == 8)
             {
                 return pp;
@@ -147,11 +149,13 @@ size_t curl_ftp_scanfile_callback(void *buffer, size_t size, size_t nmemb, void 
         if(pp && curr->call_function)
         {
             curr->call_function(pp,file_size,FOLDER_MODE);
-        }
-		pp = find_file_name_point(pp,45,&file_size);/////'-----'
-        if(pp && curr->call_function)
-        {
-            curr->call_function(pp,file_size,FILE_MODE);
+        }else{
+        	pp = curr->file_name_buff;
+			pp = find_file_name_point(pp,45,&file_size);/////'-----'
+	        if(pp && curr->call_function)
+	        {
+	            curr->call_function(pp,file_size,FILE_MODE);
+	        }
         }
         memset(curr->file_name_buff,0,BUFF_INCREASE_NUM_BASE);
         p1 = p + 1;
@@ -199,7 +203,7 @@ int init_curl_ftp_parame(CURL_FTP_OPER_FD *fop,CURL_FTP_INIT_PARAME *init_parame
 	memcpy(curr,init_parame->ip,(len - 1));
 	fop->ip = curr;
 	curr += len;
-
+	
 	if(init_parame->user == NULL)
 	{
 		PERROR("There is something wrong with teansmit paramter error\n");
@@ -216,7 +220,7 @@ int init_curl_ftp_parame(CURL_FTP_OPER_FD *fop,CURL_FTP_INIT_PARAME *init_parame
 	memcpy(curr,init_parame->user,(len - 1));
 	fop->user = curr;
 	curr += len;
-
+	
 	if(init_parame->pass == NULL)
 	{	
 		PERROR("There is something wrong with teansmit paramter error\n");
@@ -247,15 +251,22 @@ int init_curl_ftp_parame(CURL_FTP_OPER_FD *fop,CURL_FTP_INIT_PARAME *init_parame
 		PERROR("There is something wrong with teansmit paramter error\n");
 		return TRANSMIT_PARAMETER_ERROR;
 	}
-	memcpy(curr,init_parame->base_dir,(len - 1));
-	if(curr[len - 2] == '/')
+	
+	memcpy(curr,init_parame->base_dir,(len - 2));
+	if(curr[len - 3] == '/')
 	{
-		curr[len - 1] = 0;
+		curr[len - 2] = 0;
 	}else{
-		curr[len - 1] = '/';
+		curr[len - 2] = '/';
 	}
+	if(curr[0] == '/')
+		curr++;
 	fop->base_dir = curr;
 	curr += len;
+
+	fop->time_out = init_parame->timeout;
+	fop->ftp_mode = init_parame->mode;
+	fop->port = init_parame->port;
 
 	len = snprintf(curr,fop->info_buf_len,"ftp://%s:%s@%s:%d/",fop->user,fop->pass,fop->ip,fop->port);
 	if(len >= fop->info_buf_len)
@@ -263,10 +274,7 @@ int init_curl_ftp_parame(CURL_FTP_OPER_FD *fop,CURL_FTP_INIT_PARAME *init_parame
 		PERROR("There is something wrong with teansmit paramter error\n");
 		return TRANSMIT_PARAMETER_ERROR;
 	}
-	
-	fop->time_out = init_parame->timeout;
-	fop->base_dir = init_parame->base_dir;
-	fop->port = init_parame->port;
+	fop->base_curl= curr;
 }
 
 void curl_scan_file_option(CURL_FTP_OPER_FD *curr,const char *url)
@@ -278,7 +286,7 @@ void curl_scan_file_option(CURL_FTP_OPER_FD *curr,const char *url)
 		PERROR("There is something wrong with curl option set\n");
 	}
 	
-	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_WRITEDATA, curr);
+	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_WRITEDATA, (void*)curr);
 	if(ret_set != CURLE_OK)
 	{
 		PERROR("There is something wrong with curl option set\n");
@@ -506,6 +514,8 @@ void cmd_curl_ftp_option(CURL_FTP_OPER_FD *curr,const char *url,struct curl_slis
 //////////////////////////////////////////////////////////////////////////////////////
 int global_curl_ftp_init()
 {
+	head = NULL;
+	tail = NULL;
 	pthread_mutex_init(&init_fd_mutex,NULL);
 }
 
@@ -542,7 +552,7 @@ int init_curl_ftp_fd(CURL_FTP_INIT_PARAME *init_parame)
 
 		if(head == NULL)
 		{
-			head == curr;
+			head = curr;
 			tail = curr;
 		}else{
 			tail->next = curr;
@@ -572,7 +582,7 @@ int scan_curl_ftp_folder(int fop,const char *re_path,SCAN_CURL_FTP_FOLDER_CALLBA
 	char cmd_buf[BUFF_CMD_CURLFTP_LEN] = {0};
 	const char *pp = NULL;
 	CURL_FTP_OPER_FD *curr = NULL;
-	if(fop < 0)
+	if(fop < 0 || head == NULL)
 	{
 		PERROR("There is something wrong with teansmit paramter error\n");
 		return TRANSMIT_PARAMETER_ERROR;
@@ -582,14 +592,10 @@ int scan_curl_ftp_folder(int fop,const char *re_path,SCAN_CURL_FTP_FOLDER_CALLBA
 		PERROR("There is no parameter of callback and set default callback function\n");
 		call_function = scan_file_list_under_ftpdir;
 	}
-	curr->call_function = call_function;
+	curr = head;
 	for(i = 0;i < fop;i++)
 	{
-		if(curr == NULL)
-			curr = head;
-		else
-			curr = curr->next;
-
+		curr = curr->next;
 		if(curr == NULL)
 		{
 			PERROR("There is something wrong with teansmit paramter error\n");
@@ -597,6 +603,7 @@ int scan_curl_ftp_folder(int fop,const char *re_path,SCAN_CURL_FTP_FOLDER_CALLBA
 		}
 	}
 	pthread_mutex_lock(&curr->scan_mutex);
+	curr->call_function = call_function;
 	if(curr->p_curl)
 	{
 		curl_easy_cleanup(curr->p_curl);
@@ -610,7 +617,7 @@ int scan_curl_ftp_folder(int fop,const char *re_path,SCAN_CURL_FTP_FOLDER_CALLBA
 		pthread_mutex_unlock(&curr->scan_mutex);
 		return SYSTEM_FUNCTION_CALL_ERROR;
 	}
-
+	
 	if(re_path)
 	{
 		len = frame_strlen(re_path);
@@ -620,32 +627,37 @@ int scan_curl_ftp_folder(int fop,const char *re_path,SCAN_CURL_FTP_FOLDER_CALLBA
 		else
 			sprintf(cmd_buf,"%s%s%s/",curr->base_curl,curr->base_dir,re_path);
 	}else{
-		sprintf(cmd_buf,"%s%s%s",curr->base_curl,curr->base_dir);
+		sprintf(cmd_buf,"%s%s",curr->base_curl,curr->base_dir);
 	}
+
 	curl_scan_file_option(curr,cmd_buf);
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		PERROR("There is something with curl ftp operation\n");
+		PERROR("There is something with curl ftp operation :: %d!errno:%d,err:%s\n",ret,errno,strerror(errno));
 	}
 	
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
 
-	pp = curr->file_name_buff;
-    pp = find_file_name_point(pp,100,&file_size);/////'ddddddd'
-    if(pp)
-    {
-    	if(curr->call_function)
-        	curr->call_function(pp,file_size,FOLDER_MODE);
-    }else{
-    	pp = find_file_name_point(pp,45,&file_size);/////'---'
-    	if(pp && curr->call_function)
-    	{
-    		curr->call_function(pp,file_size,FILE_MODE);
-    	}
-    }
-    memset(curr->file_name_buff,0,BUFF_INCREASE_NUM_BASE);
+	if(curr->file_name_buff)
+	{
+		pp = curr->file_name_buff;
+	    pp = find_file_name_point(pp,100,&file_size);/////'ddddddd'
+	    if(pp)
+	    {
+	    	if(curr->call_function)
+	        	curr->call_function(pp,file_size,FOLDER_MODE);
+	    }else{
+	    	pp = curr->file_name_buff;
+	    	pp = find_file_name_point(pp,45,&file_size);/////'---'
+	    	if(pp && curr->call_function)
+	    	{
+	    		curr->call_function(pp,file_size,FILE_MODE);
+	    	}
+	    }
+	    memset(curr->file_name_buff,0,BUFF_INCREASE_NUM_BASE);
+	}
 	pthread_mutex_unlock(&curr->scan_mutex);
 	return (int)ret;
 }
@@ -660,19 +672,16 @@ int upload_curl_ftp_file(int fop,const char *up_file,const char *re_path,const c
 	CURL_FTP_OPER_FD *curr = NULL;
 	struct curl_slist *header_list = NULL;
 	
-	if( up_file == NULL || fop < 0 )
+	if( up_file == NULL || fop < 0 || head == NULL)
 	{
 		PERROR("There is something wrong with teansmit paramter error\n");
 		return TRANSMIT_PARAMETER_ERROR;
 	}
 
+	curr = head;
 	for(i = 0;i < fop;i++)
 	{
-		if(curr == NULL)
-			curr = head;
-		else
-			curr = curr->next;
-
+		curr = curr->next;
 		if(curr == NULL)
 		{
 			PERROR("There is something wrong with teansmit paramter error\n");
@@ -733,7 +742,7 @@ int upload_curl_ftp_file(int fop,const char *up_file,const char *re_path,const c
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		PERROR("There is something with curl ftp operation\n");
+		PERROR("There is something with curl ftp operation :: %d!errno:%d,err:%s\n",ret,errno,strerror(errno));
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -749,19 +758,16 @@ int download_curl_ftp_file(int fop,const char *down_file,const char *re_path,con
 	int i = 0;
 	CURL_FTP_OPER_FD *curr = NULL;
 
-	if(fop < 0 || down_file == NULL || to_patn_name == NULL)
+	if(fop < 0 || down_file == NULL || to_patn_name == NULL || head == NULL)
 	{
 		PERROR("There is something wrong with teansmit paramter error\n");
 		return TRANSMIT_PARAMETER_ERROR;
 	}
 
+	curr = head;
 	for(i = 0;i < fop;i++)
 	{
-		if(curr == NULL)
-			curr = head;
-		else
-			curr = curr->next;
-
+		curr = curr->next;
 		if(curr == NULL)
 		{
 			PERROR("There is something wrong with teansmit paramter error\n");
@@ -800,7 +806,7 @@ int download_curl_ftp_file(int fop,const char *down_file,const char *re_path,con
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		PERROR("There is something with curl ftp operation\n");
+		PERROR("There is something with curl ftp operation :: %d!errno:%d,err:%s\n",ret,errno,strerror(errno));
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -816,19 +822,16 @@ int rename_curl_ftp_file(int fop,const char *origin_name,const char *re_path,con
 	CURL_FTP_OPER_FD *curr = NULL;
 	struct curl_slist *header_list = NULL;
 	
-	if(origin_name == NULL || to_name == NULL || fop < 0)
+	if(origin_name == NULL || to_name == NULL || fop < 0 || head == NULL)
 	{
 		PERROR("There is something wrong with teansmit paramter error\n");
 		return TRANSMIT_PARAMETER_ERROR;
 	}
 
+	curr = head;
 	for(i = 0;i < fop;i++)
 	{
-		if(curr == NULL)
-			curr = head;
-		else
-			curr = curr->next;
-
+		curr = curr->next;
 		if(curr == NULL)
 		{
 			PERROR("There is something wrong with teansmit paramter error\n");
@@ -867,7 +870,7 @@ int rename_curl_ftp_file(int fop,const char *origin_name,const char *re_path,con
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		PERROR("There is something with curl ftp operation\n");
+		PERROR("There is something with curl ftp operation :: %d!errno:%d,err:%s\n",ret,errno,strerror(errno));
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -882,19 +885,16 @@ int delete_curl_ftp_file(int fop,const char *re_path,const char *file_name)
 	CURL_FTP_OPER_FD *curr = NULL;
 	struct curl_slist *header_list = NULL;
 	
-	if(file_name == NULL || fop < 0)
+	if(file_name == NULL || fop < 0 || head == NULL)
 	{
 		PERROR("There is something wrong with teansmit paramter error\n");
 		return TRANSMIT_PARAMETER_ERROR;
 	}
 
+	curr = head;
 	for(i = 0;i < fop;i++)
 	{
-		if(curr == NULL)
-			curr = head;
-		else
-			curr = curr->next;
-
+		curr = curr->next;
 		if(curr == NULL)
 		{
 			PERROR("There is something wrong with teansmit paramter error\n");
@@ -930,7 +930,7 @@ int delete_curl_ftp_file(int fop,const char *re_path,const char *file_name)
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		PERROR("There is something with curl ftp operation\n");
+		PERROR("There is something with curl ftp operation :: %d!errno:%d,err:%s\n",ret,errno,strerror(errno));
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -945,19 +945,16 @@ int delete_curl_ftp_dir(int fop,const char *re_path)
 	CURL_FTP_OPER_FD *curr = NULL;
 	struct curl_slist *header_list = NULL;
 	
-	if(re_path == NULL || fop < 0)
+	if(re_path == NULL || fop < 0 || head == NULL)
 	{
 		PERROR("There is something wrong with teansmit paramter error\n");
 		return TRANSMIT_PARAMETER_ERROR;
 	}
 
+	curr = head;
 	for(i = 0;i < fop;i++)
 	{
-		if(curr == NULL)
-			curr = head;
-		else
-			curr = curr->next;
-
+		curr = curr->next;
 		if(curr == NULL)
 		{
 			PERROR("There is something wrong with teansmit paramter error\n");
@@ -988,7 +985,7 @@ int delete_curl_ftp_dir(int fop,const char *re_path)
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		PERROR("There is something with curl ftp operation\n");
+		PERROR("There is something with curl ftp operation :: %d!errno:%d,err:%s\n",ret,errno,strerror(errno));
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -1003,19 +1000,16 @@ int create_curl_ftp_dir(int fop,const char *re_path)
 	CURL_FTP_OPER_FD *curr = NULL;
 	struct curl_slist *header_list = NULL;
 	
-	if(re_path == NULL || fop < 0)
+	if(re_path == NULL || fop < 0 || head == NULL)
 	{
 		PERROR("There is something wrong with teansmit paramter error\n");
 		return TRANSMIT_PARAMETER_ERROR;
 	}
 
+	curr = head;
 	for(i = 0;i < fop;i++)
 	{
-		if(curr == NULL)
-			curr = head;
-		else
-			curr = curr->next;
-
+		curr = curr->next;
 		if(curr == NULL)
 		{
 			PERROR("There is something wrong with teansmit paramter error\n");
@@ -1046,7 +1040,7 @@ int create_curl_ftp_dir(int fop,const char *re_path)
 	ret = curl_easy_perform(curr->p_curl);
 	if (ret != CURLE_OK)
 	{
-		PERROR("There is something with curl ftp operation\n");
+		PERROR("There is something with curl ftp operation :: %d!errno:%d,err:%s\n",ret,errno,strerror(errno));
 	}
 	curl_easy_cleanup(curr->p_curl);
 	curr->p_curl = NULL;
@@ -1057,15 +1051,12 @@ void reset_curl_ftp_fd(int fop)
 {
 	int i = 0;
 	CURL_FTP_OPER_FD *curr = NULL;
-	if(fop < 0)
+	if(fop < 0 || head == NULL)
 		return;
+	curr = head;
 	for(i = 0;i < fop;i++)
 	{
-		if(curr == NULL)
-			curr = head;
-		else
-			curr = curr->next;
-
+		curr = curr->next;
 		if(curr == NULL)
 		{
 			PERROR("There is something wrong with teansmit paramter error\n");
@@ -1117,4 +1108,32 @@ void global_curl_ftp_cleanup()
 	pthread_mutex_unlock(&init_fd_mutex);
 }
 
+//////////////////////////////////////////////////////////////////////////////////
+void test_curl_ftp_function()
+{
+	CURL_FTP_INIT_PARAME init_parame = {0};
+	int fop_22 = 0,fop_219 = 0;
+	unsigned short port = 21;
+	const char ip_22[] = "192.168.8.22",ip_219[] = "192.168.8.219",user_[] = "appftp",pass_[] = "123",
+		base_dir_22[] = "/usr/seentech/app/22",base_dir_219[] = "/usr/seentech/app/219";
+
+	global_curl_ftp_init();
+
+	init_parame.ip = ip_22;
+	init_parame.base_dir = base_dir_22;
+	init_parame.user = user_;
+	init_parame.pass = pass_;
+	init_parame.port = port;
+	init_parame.mode = CURL_FTP_EPSV;
+	init_parame.timeout = 300;
+	fop_22 = init_curl_ftp_fd(&init_parame);
+	scan_curl_ftp_folder(fop_22,NULL,NULL);
+	upload_curl_ftp_file(fop_22,"Makefile",NULL,NULL);
+
+	init_parame.ip = ip_219;
+	init_parame.base_dir = base_dir_219;
+	fop_219 = init_curl_ftp_fd(&init_parame);
+	scan_curl_ftp_folder(fop_219,NULL,NULL);
+	upload_curl_ftp_file(fop_219,"Makefile",NULL,NULL);
+}
 

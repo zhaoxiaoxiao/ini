@@ -55,6 +55,9 @@ void reset_curl_ftp_fd(int fop);
 
 void global_curl_ftp_cleanup();
 
+
+void test_curl_ftp_function();
+
 #ifdef __cplusplus
 }
 #endif
