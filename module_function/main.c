@@ -4,7 +4,8 @@
 
 #include "common.h"
 #include "frame_tool.h"
-#include "ftp_curl_operation.h"
+#include "tcp_ack_scan.h"
+
 
 static struct itimerval itv = {0};
 
@@ -93,7 +94,7 @@ int main(int argc, char *argv[])
 		PERROR("Failed to ignore SIGHUP\n");
     }
 	
-	test_curl_ftp_function();
+	tcp_ack_scan_server_port("192.168.8.219");
 	doing_defore_exiting();
 	return 0;
 }

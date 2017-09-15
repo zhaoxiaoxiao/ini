@@ -446,7 +446,13 @@ void curl_download_file_option(CURL_FTP_OPER_FD *curr,const char *url,FILE *loca
 	{
 		PERROR("There is something wrong with curl option set\n");
 	}
-
+/*
+	ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_TRANSFERTEXT, 1);//ftp transfer using ASCII////CURLOPT_BINARYTRANSFER
+	if(ret_set != CURLE_OK)
+	{
+		PERROR("There is something wrong with curl option set\n");
+	}
+*/
 	if(curr->ftp_mode == CURL_FTP_EPRT)
 	{
 		ret_set = curl_easy_setopt(curr->p_curl, CURLOPT_FTP_USE_EPRT, 1);

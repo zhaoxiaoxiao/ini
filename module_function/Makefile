@@ -39,6 +39,7 @@ LOCAL_SRC_CFILES := \
 		es_search_result.c	\
 		es_test_function.c	\
 		ftp_curl_operation.c	\
+		tcp_ack_scan.c		\
 
 LOCAL_SRC_CCFILES := \
 
