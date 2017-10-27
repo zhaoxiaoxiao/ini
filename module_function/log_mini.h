@@ -13,17 +13,18 @@ typedef enum log_level
     INFO,
     WARN,
     ERROR,
-    FATAL,
     NUM_LOG_LEVELS,
 }LOG_LEVEL;
 
-#define LOG_FATAL(fmt, args...)		log(FATAL,__FILE__,__FUNCTION__,__LINE__,fmt, ## args)
 #define LOG_ERROR(fmt, args...)		log(ERROR,__FILE__,__FUNCTION__,__LINE__,fmt, ## args)
 #define LOG_WARN(fmt, args...)		log(WARN,__FILE__,__FUNCTION__,__LINE__,fmt, ## args)
 #define LOG_INFO(fmt, args...)		log(INFO,__FILE__,__FUNCTION__,__LINE__,fmt, ## args)
 #define LOG_DEBUG(fmt, args...)		log(DEBUG,__FILE__,__FUNCTION__,__LINE__,fmt, ## args)
 #define LOG_TRACE(fmt, args...)		log(DEBUG,__FILE__,__FUNCTION__,__LINE__,fmt, ## args)
 
+#define LOG_FLUSH()					log_flush()
+
+void log_flush();
 
 void log(LOG_LEVEL level,const char *fil,const char *fun,int l_num,const char *fmt, ...);
 
