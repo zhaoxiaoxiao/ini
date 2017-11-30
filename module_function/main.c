@@ -4,13 +4,14 @@
 
 #include "common.h"
 #include "frame_tool.h"
-#include "tcp_ack_scan.h"
+#include "log_mini.h"
 
 
 static struct itimerval itv = {0};
 
 void doing_defore_exiting()
 {
+	log_flush();
 	PERROR("There is prepare exiting and do some clean work\n");
 	return;
 }
@@ -46,7 +47,7 @@ void clock_init()
 
 void sig_catch(int sig)
 {
-	PERROR("!!!!!!!!well, we catch signal in this process :::%d will be exit\n\n",sig);
+	PERROR("!!!!!!!!well, we catch signal in this process :::%d will be exit\n",sig);
 	switch(sig)
 	{
 		case SIGALRM:
@@ -93,8 +94,12 @@ int main(int argc, char *argv[])
 	{
 		PERROR("Failed to ignore SIGHUP\n");
     }
-	
-	tcp_ack_scan_server_port("192.168.8.219");
+	log_set_filename("xiaoxiao",2*1024*1024);
+	LOG_ERROR("xiaoxiao error message\n");
+	LOG_WARN("xiaoxiao warnning message\n");
+	LOG_INFO("xiaoxiao info message\n");
+	LOG_DEBUG("xiaoxiao debug message\n");
+	LOG_TRACE("xiaoxiao trace message\n");
 	doing_defore_exiting();
 	return 0;
 }

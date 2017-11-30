@@ -41,8 +41,12 @@ static LOG_FILE_INFO log_file_info = {0};
 void open_log_file(const char *filename)
 {
 	assert(log_file_info.fp_ == NULL);
-
 	log_file_info.fp_ = fopen(filename, "ae");
+	if(log_file_info.fp_ == NULL)
+	{
+		fprintf(stderr, "OpenNewFile::fopen() failed %d %s\n", errno,strerror(errno));
+		return;
+	}
 	log_file_info.writtenBytes_ = 0;
 	setbuffer(log_file_info.fp_, log_file_info.buffer_, LOG_RECORD_FILE_BUFLEN);
 
@@ -100,24 +104,24 @@ static LOG_FILE log_file_ = {0};
 
 void get_log_file_name(char *name,time_t* now)
 {
-	struct tm tm;
+	struct tm tm_;
 	int len = 0;
 	char *p_char = name;
 
-	len = frame_strlen(name);
+	len = frame_strlen(log_file_.base_file_name);
 	len += LOG_RECORD_FILE_SUFFIXLEN;
 	if(len >= LOG_RECORD_FILE_NAMELEN)
 	{
 		fprintf(stderr, "Get log file name too long out of buffer\n");
 	}
 
-	len = frame_strlen(name);
+	len = frame_strlen(log_file_.base_file_name);
 	memcpy(p_char,log_file_.base_file_name,len);
 	p_char = p_char + len;
 
 	*now = time(NULL);
-	gmtime_r(now, &tm);
-	sprintf(p_char,".%d%d%d-%d%d%d.log",tm.tm_year,tm.tm_mon + 1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec);
+	gmtime_r(now, &tm_);
+	sprintf(p_char,".%d%02d%02d-%02d%02d%02d.log",tm_.tm_year+1900,tm_.tm_mon + 1,tm_.tm_mday,tm_.tm_hour+8,tm_.tm_min,tm_.tm_sec);
 	return;
 }
 
@@ -190,7 +194,7 @@ void log(LOG_LEVEL level,const char *fil,const char *fun,int l_num,const char *f
 	if(level < log_recod.lev)
 		return;
 
-	sprintf(p_char,"%s %s %s %d",log_level_str[level],fil,fun,l_num);
+	sprintf(p_char,"%s :: %s() %d: %s ",fil,fun,l_num,log_level_str[level]);
 	p_char = frame_end_charstr(p_char);
 	n = p_char - msg;
 	
@@ -223,5 +227,7 @@ void log_set_filename(const char *name,int size)
 	log_recod.out = log_file_outpuut;
 	log_recod.flu = log_file_flush;
 	log_recod.lev = INFO;
+
+	log_file_roll_file();
 }
 
