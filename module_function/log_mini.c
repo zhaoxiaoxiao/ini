@@ -24,6 +24,7 @@ typedef void (*FLUSHFUNCTION)();
 typedef struct log_record{
 	OUTPUTFUCTION 		out;
 	FLUSHFUNCTION		flu;
+	int 				time_zone;
 	LOG_LEVEL			lev;
 }LOG_RECORD;
 
@@ -121,7 +122,8 @@ void get_log_file_name(char *name,time_t* now)
 
 	*now = time(NULL);
 	gmtime_r(now, &tm_);
-	sprintf(p_char,".%d%02d%02d-%02d%02d%02d.log",tm_.tm_year+1900,tm_.tm_mon + 1,tm_.tm_mday,tm_.tm_hour+8,tm_.tm_min,tm_.tm_sec);
+	sprintf(p_char,".%04d%02d%02d-%02d%02d%02d.log",tm_.tm_year+1900,tm_.tm_mon + 1,
+		tm_.tm_mday,tm_.tm_hour + log_recod.time_zone,tm_.tm_min,tm_.tm_sec);
 	return;
 }
 
@@ -170,6 +172,14 @@ void log_set_level(LOG_LEVEL le)
 	log_recod.lev = le;
 }
 
+void log_time_set_timezone(int hour_diff)
+{
+	if(hour_diff >= -12 && hour_diff <= 12)
+		log_recod.time_zone = hour_diff;
+	else
+		fprintf(stderr, "The hour diff is out of range and set error\n");
+}
+
 void log_flush()
 {
 	if(log_recod.flu)
@@ -189,6 +199,7 @@ void log(LOG_LEVEL level,const char *fil,const char *fun,int l_num,const char *f
 		log_recod.out = log_default_output;
 		log_recod.flu = log_default_flush;
 		log_recod.lev = INFO;
+		log_recod.time_zone = 8;
 	}
 
 	if(level < log_recod.lev)
@@ -226,6 +237,7 @@ void log_set_filename(const char *name,int size)
 
 	log_recod.out = log_file_outpuut;
 	log_recod.flu = log_file_flush;
+	log_recod.time_zone = 8;
 	log_recod.lev = INFO;
 
 	log_file_roll_file();

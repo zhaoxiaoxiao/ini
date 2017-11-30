@@ -30,6 +30,8 @@ void log(LOG_LEVEL level,const char *fil,const char *fun,int l_num,const char *f
 
 void log_set_level(LOG_LEVEL le);
 
+void log_time_set_timezone(int hour_diff);
+
 void log_set_filename(const char *name,int size);
 
 
